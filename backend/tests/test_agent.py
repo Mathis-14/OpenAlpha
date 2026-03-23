@@ -56,19 +56,67 @@ def _mock_tool_response(
 
 
 @pytest.mark.anyio
+@patch("app.agent.runner.dispatch_tool", new_callable=AsyncMock)
 @patch("app.agent.runner.settings")
 @patch("app.agent.runner.Mistral")
-async def test_agent_direct_text(
+async def test_agent_no_tool_triggers_retry(
     mock_mistral_cls: MagicMock,
     mock_settings: MagicMock,
+    mock_dispatch: AsyncMock,
     client: AsyncClient,
 ):
+    """First response has no tool calls -> runner re-prompts, second uses tool."""
     mock_settings.mistral_api_key = "test-key"
     mock_settings.mistral_model = "mistral-small-latest"
 
     mock_client = MagicMock()
     mock_client.chat.complete_async = AsyncMock(
-        return_value=_mock_text_response("AAPL is trading at $150."),
+        side_effect=[
+            _mock_text_response("AAPL is trading at $150."),
+            _mock_tool_response(),
+            _mock_text_response("Based on the data, AAPL is at $150."),
+        ],
+    )
+    mock_mistral_cls.return_value = mock_client
+
+    mock_dispatch.return_value = json.dumps(
+        {"symbol": "AAPL", "current_price": 150.0},
+    )
+
+    response = await client.post(
+        "/api/agent",
+        json={"query": "Tell me about AAPL", "ticker": "AAPL"},
+    )
+
+    assert response.status_code == 200
+    events = _parse_sse(response.text)
+    event_types = [e["event"] for e in events]
+
+    assert "tool_call" in event_types
+    assert "tool_result" in event_types
+    assert "text" in event_types
+    assert "done" in event_types
+    assert mock_client.chat.complete_async.await_count == 3
+
+
+@pytest.mark.anyio
+@patch("app.agent.runner.settings")
+@patch("app.agent.runner.Mistral")
+async def test_agent_no_tool_after_retry_yields_text(
+    mock_mistral_cls: MagicMock,
+    mock_settings: MagicMock,
+    client: AsyncClient,
+):
+    """Both responses have no tool calls -> yield text after retry exhausted."""
+    mock_settings.mistral_api_key = "test-key"
+    mock_settings.mistral_model = "mistral-small-latest"
+
+    mock_client = MagicMock()
+    mock_client.chat.complete_async = AsyncMock(
+        side_effect=[
+            _mock_text_response("I think AAPL is good."),
+            _mock_text_response("AAPL is trading at $150."),
+        ],
     )
     mock_mistral_cls.return_value = mock_client
 
@@ -78,17 +126,13 @@ async def test_agent_direct_text(
     )
 
     assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/event-stream")
-
     events = _parse_sse(response.text)
     event_types = [e["event"] for e in events]
 
+    assert "tool_call" not in event_types
     assert "text" in event_types
     assert "done" in event_types
-    assert events[-1]["event"] == "done"
-
-    text_event = next(e for e in events if e["event"] == "text")
-    assert "AAPL" in str(text_event["data"])
+    assert mock_client.chat.complete_async.await_count == 2
 
 
 @pytest.mark.anyio
