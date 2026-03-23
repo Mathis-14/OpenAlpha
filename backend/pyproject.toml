@@ -12,6 +12,7 @@ dependencies = [
     "yfinance>=0.2.40",
     "cachetools>=5.5.0",
     "fedfred>=3.0.0",
+    "edgartools>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -99,6 +100,7 @@ module = [
     "cachetools.*",
     "fedfred.*",
     "pandas.*",
+    "edgar.*",
 ]
 ignore_missing_imports = true
 
