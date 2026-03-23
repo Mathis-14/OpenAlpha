@@ -1,0 +1,65 @@
+from fastapi import APIRouter
+from fastapi import HTTPException
+
+from app.models.market import Fundamentals
+from app.models.market import MarketResponse
+from app.models.market import PeriodType
+from app.models.market import PricePoint
+from app.models.market import TickerOverview
+from app.services import yfinance_service
+
+router = APIRouter(prefix="/api/market", tags=["market"])
+
+
+@router.get("/{ticker}", response_model=MarketResponse)
+async def get_market_data(
+    ticker: str,
+    period: PeriodType = "1mo",
+) -> MarketResponse:
+    """Full market data: overview + fundamentals + price history."""
+    try:
+        return await yfinance_service.get_market_data(ticker, period)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not fetch data for ticker '{ticker}': {exc}",
+        ) from exc
+
+
+@router.get("/{ticker}/overview", response_model=TickerOverview)
+async def get_ticker_overview(ticker: str) -> TickerOverview:
+    """Current price, volume, market cap, 52-week range."""
+    try:
+        return await yfinance_service.get_ticker_overview(ticker)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not fetch overview for '{ticker}': {exc}",
+        ) from exc
+
+
+@router.get("/{ticker}/fundamentals", response_model=Fundamentals)
+async def get_fundamentals(ticker: str) -> Fundamentals:
+    """Key financial fundamentals: P/E, EPS, revenue, margins."""
+    try:
+        return await yfinance_service.get_fundamentals(ticker)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not fetch fundamentals for '{ticker}': {exc}",
+        ) from exc
+
+
+@router.get("/{ticker}/history", response_model=list[PricePoint])
+async def get_price_history(
+    ticker: str,
+    period: PeriodType = "1mo",
+) -> list[PricePoint]:
+    """OHLCV price history for a given period."""
+    try:
+        return await yfinance_service.get_price_history(ticker, period)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Could not fetch history for '{ticker}': {exc}",
+        ) from exc
