@@ -6,6 +6,7 @@ from email.utils import parsedate_to_datetime
 import feedparser
 from cachetools import TTLCache
 
+from app.exceptions import ProviderTimeoutError
 from app.exceptions import UpstreamDataError
 from app.models.news import NewsArticle
 from app.models.news import NewsResponse
@@ -63,6 +64,12 @@ async def get_news(ticker: str, limit: int = 10) -> NewsResponse:
     if cached is not None:
         return cached
 
-    response: NewsResponse = await asyncio.to_thread(_sync_fetch_news, ticker, limit)
+    try:
+        response: NewsResponse = await asyncio.wait_for(
+            asyncio.to_thread(_sync_fetch_news, ticker, limit),
+            timeout=10.0,
+        )
+    except TimeoutError:
+        raise ProviderTimeoutError(provider="yahoo_news") from None
     _news_cache[cache_key] = response
     return response

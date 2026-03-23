@@ -5,6 +5,7 @@ from typing import Any
 import yfinance as yf
 from cachetools import TTLCache
 
+from app.exceptions import ProviderTimeoutError
 from app.exceptions import UpstreamDataError
 from app.models.market import Fundamentals
 from app.models.market import MarketResponse
@@ -14,6 +15,7 @@ from app.models.market import TickerOverview
 
 logger = logging.getLogger(__name__)
 
+_TIMEOUT = 10.0
 _CACHE_TTL = 300  # 5 minutes
 _CACHE_MAX = 256
 
@@ -146,9 +148,13 @@ async def get_market_data(
             price_history=cached_history,
         )
 
-    overview, fundamentals, history = await asyncio.to_thread(
-        _sync_fetch_all, upper, period
-    )
+    try:
+        overview, fundamentals, history = await asyncio.wait_for(
+            asyncio.to_thread(_sync_fetch_all, upper, period),
+            timeout=_TIMEOUT,
+        )
+    except TimeoutError:
+        raise ProviderTimeoutError(provider="yfinance") from None
 
     _overview_cache[upper] = overview
     _fundamentals_cache[upper] = fundamentals
@@ -168,7 +174,13 @@ async def get_ticker_overview(symbol: str) -> TickerOverview:
     if cached is not None:
         return cached
 
-    overview: TickerOverview = await asyncio.to_thread(_sync_fetch_overview, upper)
+    try:
+        overview: TickerOverview = await asyncio.wait_for(
+            asyncio.to_thread(_sync_fetch_overview, upper),
+            timeout=_TIMEOUT,
+        )
+    except TimeoutError:
+        raise ProviderTimeoutError(provider="yfinance") from None
     _overview_cache[upper] = overview
     return overview
 
@@ -180,9 +192,13 @@ async def get_fundamentals(symbol: str) -> Fundamentals:
     if cached is not None:
         return cached
 
-    fundamentals: Fundamentals = await asyncio.to_thread(
-        _sync_fetch_fundamentals, upper
-    )
+    try:
+        fundamentals: Fundamentals = await asyncio.wait_for(
+            asyncio.to_thread(_sync_fetch_fundamentals, upper),
+            timeout=_TIMEOUT,
+        )
+    except TimeoutError:
+        raise ProviderTimeoutError(provider="yfinance") from None
     _fundamentals_cache[upper] = fundamentals
     return fundamentals
 
@@ -196,8 +212,12 @@ async def get_price_history(
     if cached is not None:
         return cached
 
-    history: list[PricePoint] = await asyncio.to_thread(
-        _sync_fetch_history, symbol.upper(), period
-    )
+    try:
+        history: list[PricePoint] = await asyncio.wait_for(
+            asyncio.to_thread(_sync_fetch_history, symbol.upper(), period),
+            timeout=_TIMEOUT,
+        )
+    except TimeoutError:
+        raise ProviderTimeoutError(provider="yfinance") from None
     _history_cache[cache_key] = history
     return history

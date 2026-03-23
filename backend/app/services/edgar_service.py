@@ -7,6 +7,7 @@ from edgar import Company
 from edgar import set_identity
 
 from app.config import settings
+from app.exceptions import ProviderTimeoutError
 from app.models.filings import Filing
 from app.models.filings import FilingSection
 from app.models.filings import FilingsResponse
@@ -105,8 +106,12 @@ async def get_filings(
     if cached is not None:
         return cached
 
-    response: FilingsResponse = await asyncio.to_thread(
-        _sync_fetch_filings, ticker, form_type, limit
-    )
+    try:
+        response: FilingsResponse = await asyncio.wait_for(
+            asyncio.to_thread(_sync_fetch_filings, ticker, form_type, limit),
+            timeout=10.0,
+        )
+    except TimeoutError:
+        raise ProviderTimeoutError(provider="edgar") from None
     _filings_cache[cache_key] = response
     return response
