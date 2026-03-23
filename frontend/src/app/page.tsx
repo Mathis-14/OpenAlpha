@@ -1,0 +1,107 @@
+"use client";
+
+import Aurora from "@/components/Aurora";
+import SplitText from "@/components/SplitText";
+import TickerSearch from "@/components/ticker-search";
+
+const FEATURES = [
+  {
+    title: "Real-Time Market Data",
+    description: "Live prices, fundamentals, and historical OHLCV data for any publicly traded stock.",
+  },
+  {
+    title: "Macro Indicators",
+    description: "Fed Funds rate, CPI, GDP growth, Treasury yields, and unemployment -- always current.",
+  },
+  {
+    title: "SEC Filings",
+    description: "Parsed 10-K and 10-Q reports with key sections: Risk Factors, MD&A, and more.",
+  },
+  {
+    title: "AI-Powered Analysis",
+    description: "A conversational agent that fetches data, crunches numbers, and explains what matters.",
+  },
+];
+
+export default function LandingPage() {
+  return (
+    <div className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden">
+      {/* Aurora background */}
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <Aurora
+          colorStops={["#6366f1", "#22c55e", "#6366f1"]}
+          amplitude={1.2}
+          blend={0.6}
+          speed={0.4}
+        />
+      </div>
+
+      {/* Gradient overlay for readability */}
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-t from-background via-background/80 to-transparent" />
+
+      {/* Content */}
+      <main className="relative z-10 flex w-full max-w-3xl flex-col items-center gap-8 px-6 py-24 text-center">
+        {/* Brand */}
+        <div className="flex flex-col items-center gap-3">
+          <span className="inline-block rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-medium tracking-widest text-primary uppercase">
+            Open Source
+          </span>
+
+          <SplitText
+            text="OpenAlpha"
+            tag="h1"
+            className="text-6xl font-bold tracking-tight text-foreground sm:text-7xl"
+            delay={40}
+            duration={0.8}
+            ease="power3.out"
+            splitType="chars"
+            from={{ opacity: 0, y: 30 }}
+            to={{ opacity: 1, y: 0 }}
+            threshold={0.1}
+            rootMargin="-50px"
+          />
+
+          <p className="max-w-lg text-lg text-muted-foreground leading-relaxed">
+            AI-powered financial intelligence. Analyze any stock with real-time
+            data, macro indicators, SEC filings, and a conversational AI agent.
+          </p>
+        </div>
+
+        {/* Search */}
+        <div className="w-full max-w-xl">
+          <TickerSearch size="lg" autoFocus />
+        </div>
+
+        {/* Feature grid */}
+        <div className="mt-8 grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
+          {FEATURES.map((feature) => (
+            <div
+              key={feature.title}
+              className="group rounded-xl border border-border/40 bg-card/40 p-5 text-left backdrop-blur-sm transition-colors hover:border-primary/30 hover:bg-card/60"
+            >
+              <h3 className="text-sm font-semibold text-foreground">
+                {feature.title}
+              </h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                {feature.description}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <p className="mt-4 text-xs text-muted-foreground/60">
+          Built with FastAPI, Mistral AI, and Next.js.{" "}
+          <a
+            href="https://github.com/Mathis-14/OpenAlpha"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-primary transition-colors"
+          >
+            View on GitHub
+          </a>
+        </p>
+      </main>
+    </div>
+  );
+}
