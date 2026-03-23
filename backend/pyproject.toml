@@ -14,6 +14,7 @@ dependencies = [
     "fedfred>=3.0.0",
     "edgartools>=3.0.0",
     "feedparser>=6.0.0",
+    "mistralai>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -103,6 +104,7 @@ module = [
     "pandas.*",
     "edgar.*",
     "feedparser.*",
+    "mistralai.*",
 ]
 ignore_missing_imports = true
 
