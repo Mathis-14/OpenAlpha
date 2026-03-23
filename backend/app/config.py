@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     )
 
     mistral_api_key: str = ""
+    mistral_model: str = "mistral-small-latest"
     fred_api_key: str = ""
     edgar_user_agent: str = "OpenAlpha dev@openalpha.io"
     backend_cors_origins: list[str] = ["http://localhost:3000"]
