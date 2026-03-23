@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 from httpx import AsyncClient
 
+from app.exceptions import UpstreamDataError
 from app.models.macro import MacroDataPoint
 from app.models.macro import MacroIndicator
 from app.models.macro import MacroSnapshot
@@ -64,10 +65,13 @@ async def test_get_macro_data(mock_get: AsyncMock, client: AsyncClient):
     "app.routers.macro.fred_service.get_macro_snapshot",
     new_callable=AsyncMock,
 )
-async def test_macro_error_returns_502(mock_get: AsyncMock, client: AsyncClient):
-    mock_get.side_effect = Exception("FRED API unreachable")
+async def test_macro_error_returns_503(mock_get: AsyncMock, client: AsyncClient):
+    mock_get.side_effect = UpstreamDataError(
+        provider="fred", detail="FRED API unreachable"
+    )
 
     response = await client.get("/api/macro")
 
-    assert response.status_code == 502
-    assert "FRED" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json()["error"] == "upstream_unavailable"
+    assert response.json()["provider"] == "fred"

@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 from httpx import AsyncClient
 
+from app.exceptions import UpstreamDataError
 from app.models.filings import Filing
 from app.models.filings import FilingSection
 from app.models.filings import FilingsResponse
@@ -73,10 +74,13 @@ async def test_filings_default_params(mock_get: AsyncMock, client: AsyncClient):
     "app.routers.filings.edgar_service.get_filings",
     new_callable=AsyncMock,
 )
-async def test_filings_error_returns_404(mock_get: AsyncMock, client: AsyncClient):
-    mock_get.side_effect = Exception("Company not found")
+async def test_filings_error_returns_503(mock_get: AsyncMock, client: AsyncClient):
+    mock_get.side_effect = UpstreamDataError(
+        provider="edgar", detail="Company not found"
+    )
 
     response = await client.get("/api/filings/ZZZZZ")
 
-    assert response.status_code == 404
-    assert "ZZZZZ" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json()["error"] == "upstream_unavailable"
+    assert response.json()["provider"] == "edgar"
