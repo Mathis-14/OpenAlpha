@@ -7,6 +7,7 @@ import fedfred as fd
 from cachetools import TTLCache
 
 from app.config import settings
+from app.exceptions import ProviderTimeoutError
 from app.exceptions import UpstreamDataError
 from app.models.macro import MacroDataPoint
 from app.models.macro import MacroIndicator
@@ -96,6 +97,11 @@ async def get_macro_snapshot() -> MacroSnapshot:
     if cached is not None:
         return cached
 
-    snapshot: MacroSnapshot = await asyncio.to_thread(_sync_fetch_all)
+    try:
+        snapshot: MacroSnapshot = await asyncio.wait_for(
+            asyncio.to_thread(_sync_fetch_all), timeout=10.0
+        )
+    except TimeoutError:
+        raise ProviderTimeoutError(provider="fred") from None
     _snapshot_cache["snapshot"] = snapshot
     return snapshot

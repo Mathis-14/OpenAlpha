@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
@@ -20,6 +21,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 _MAX_TOOL_ROUNDS = 10
+_LLM_TIMEOUT = 30.0
 _TOOL_REQUIRED_MSG = (
     "You must call at least one tool before answering. " "Do not answer from memory."
 )
@@ -84,12 +86,18 @@ async def run_agent(
 
     for _round_idx in range(_MAX_TOOL_ROUNDS):
         try:
-            response = await client.chat.complete_async(
-                model=settings.mistral_model,
-                messages=messages,
-                tools=sdk_tools,
-                tool_choice="auto",
+            response = await asyncio.wait_for(
+                client.chat.complete_async(
+                    model=settings.mistral_model,
+                    messages=messages,
+                    tools=sdk_tools,
+                    tool_choice="auto",
+                ),
+                timeout=_LLM_TIMEOUT,
             )
+        except TimeoutError:
+            yield _sse("error", {"message": "LLM request timed out"})
+            return
         except Exception as exc:
             logger.exception("Mistral API call failed")
             yield _sse("error", {"message": f"LLM request failed: {exc}"})
