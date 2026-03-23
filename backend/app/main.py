@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.config import settings
+from app.routers import filings
 from app.routers import macro
 from app.routers import market
 
@@ -33,6 +34,7 @@ app.add_middleware(
 
 app.include_router(market.router)
 app.include_router(macro.router)
+app.include_router(filings.router)
 
 
 @app.get("/health")
