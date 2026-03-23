@@ -11,6 +11,7 @@ dependencies = [
     "httpx>=0.28.0",
     "yfinance>=0.2.40",
     "cachetools>=5.5.0",
+    "fedfred>=3.0.0",
 ]
 
 [project.optional-dependencies]
@@ -96,6 +97,8 @@ disallow_untyped_defs = false
 module = [
     "yfinance.*",
     "cachetools.*",
+    "fedfred.*",
+    "pandas.*",
 ]
 ignore_missing_imports = true
 
