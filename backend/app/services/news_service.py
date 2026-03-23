@@ -6,6 +6,7 @@ from email.utils import parsedate_to_datetime
 import feedparser
 from cachetools import TTLCache
 
+from app.exceptions import UpstreamDataError
 from app.models.news import NewsArticle
 from app.models.news import NewsResponse
 
@@ -32,6 +33,11 @@ def _parse_published(entry: dict[str, str]) -> datetime | None:
 def _sync_fetch_news(ticker: str, limit: int) -> NewsResponse:
     url = _YAHOO_RSS_URL.format(ticker=ticker.upper())
     feed = feedparser.parse(url)
+
+    if feed.bozo and not feed.entries:
+        raise UpstreamDataError(
+            provider="yahoo_news", detail=f"RSS parse failed for {ticker.upper()}"
+        )
 
     articles: list[NewsArticle] = []
     for entry in feed.entries[:limit]:
