@@ -127,7 +127,11 @@ async def get_market_data(
     cached_fundamentals = _fundamentals_cache.get(upper)
     cached_history = _history_cache.get(cache_key)
 
-    if cached_overview and cached_fundamentals and cached_history:
+    if (
+        cached_overview is not None
+        and cached_fundamentals is not None
+        and cached_history is not None
+    ):
         return MarketResponse(
             overview=cached_overview,
             fundamentals=cached_fundamentals,
