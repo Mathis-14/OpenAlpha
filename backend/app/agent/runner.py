@@ -20,6 +20,9 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 _MAX_TOOL_ROUNDS = 10
+_TOOL_REQUIRED_MSG = (
+    "You must call at least one tool before answering. " "Do not answer from memory."
+)
 
 Messages = list[SystemMessage | UserMessage | AssistantMessage | ToolMessage]
 
@@ -77,6 +80,8 @@ async def run_agent(
         UserMessage(content=_build_user_content(query, ticker)),
     ]
 
+    any_tool_called = False
+
     for _round_idx in range(_MAX_TOOL_ROUNDS):
         try:
             response = await client.chat.complete_async(
@@ -101,10 +106,19 @@ async def run_agent(
         has_tool_calls = choice.finish_reason == "tool_calls" and len(tool_calls) > 0
 
         if not has_tool_calls:
+            if not any_tool_called and _round_idx == 0:
+                messages.append(
+                    AssistantMessage(
+                        content=str(msg.content) if msg.content else "",
+                    )
+                )
+                messages.append(UserMessage(content=_TOOL_REQUIRED_MSG))
+                continue
             content = str(msg.content) if msg.content else ""
             yield _sse("text", {"content": content})
             break
 
+        any_tool_called = True
         messages.append(
             AssistantMessage(
                 content=str(msg.content) if msg.content else "",
