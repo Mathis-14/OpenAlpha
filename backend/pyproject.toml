@@ -13,6 +13,7 @@ dependencies = [
     "cachetools>=5.5.0",
     "fedfred>=3.0.0",
     "edgartools>=3.0.0",
+    "feedparser>=6.0.0",
 ]
 
 [project.optional-dependencies]
@@ -101,6 +102,7 @@ module = [
     "fedfred.*",
     "pandas.*",
     "edgar.*",
+    "feedparser.*",
 ]
 ignore_missing_imports = true
 
