@@ -5,6 +5,7 @@ from typing import Any
 import yfinance as yf
 from cachetools import TTLCache
 
+from app.exceptions import UpstreamDataError
 from app.models.market import Fundamentals
 from app.models.market import MarketResponse
 from app.models.market import PeriodType
@@ -32,6 +33,13 @@ def _build_overview(info: dict[str, Any]) -> TickerOverview:
     previous = float(
         info.get("previousClose") or info.get("regularMarketPreviousClose") or 0
     )
+
+    if current == 0.0 and previous == 0.0:
+        raise UpstreamDataError(
+            provider="yfinance",
+            detail=f"No price data for symbol '{info.get('symbol', '?')}'",
+        )
+
     change = current - previous
     change_pct = (change / previous * 100) if previous else 0.0
 

@@ -1,7 +1,6 @@
 from typing import Literal
 
 from fastapi import APIRouter
-from fastapi import HTTPException
 from fastapi import Query
 
 from app.models.filings import FilingsResponse
@@ -17,10 +16,4 @@ async def get_filings(
     limit: int = Query(default=3, ge=1, le=10),
 ) -> FilingsResponse:
     """Latest SEC filings with parsed sections (Risk Factors, MD&A, Business)."""
-    try:
-        return await edgar_service.get_filings(ticker, form_type, limit)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Could not fetch filings for '{ticker}': {exc}",
-        ) from exc
+    return await edgar_service.get_filings(ticker, form_type, limit)

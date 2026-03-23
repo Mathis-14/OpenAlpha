@@ -7,6 +7,7 @@ import fedfred as fd
 from cachetools import TTLCache
 
 from app.config import settings
+from app.exceptions import UpstreamDataError
 from app.models.macro import MacroDataPoint
 from app.models.macro import MacroIndicator
 from app.models.macro import MacroSnapshot
@@ -58,7 +59,11 @@ def _build_indicator(
         for r in raw_records
     ]
 
-    latest = history[-1] if history else MacroDataPoint(date=date.today(), value=0.0)
+    if not history:
+        raise UpstreamDataError(
+            provider="fred", detail=f"No observations for {series_id}"
+        )
+    latest = history[-1]
 
     return MacroIndicator(
         series_id=series_id,

@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 from httpx import AsyncClient
 
+from app.exceptions import UpstreamDataError
 from app.models.market import Fundamentals
 from app.models.market import MarketResponse
 from app.models.market import PricePoint
@@ -142,10 +143,13 @@ async def test_get_history(mock_get: AsyncMock, client: AsyncClient):
     "app.routers.market.yfinance_service.get_market_data",
     new_callable=AsyncMock,
 )
-async def test_invalid_ticker_returns_404(mock_get: AsyncMock, client: AsyncClient):
-    mock_get.side_effect = Exception("No data found")
+async def test_upstream_error_returns_503(mock_get: AsyncMock, client: AsyncClient):
+    mock_get.side_effect = UpstreamDataError(
+        provider="yfinance", detail="No price data"
+    )
 
     response = await client.get("/api/market/ZZZZZ")
 
-    assert response.status_code == 404
-    assert "ZZZZZ" in response.json()["detail"]
+    assert response.status_code == 503
+    assert response.json()["error"] == "upstream_unavailable"
+    assert response.json()["provider"] == "yfinance"
