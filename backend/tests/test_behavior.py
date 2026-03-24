@@ -24,6 +24,7 @@ from app.services.yfinance_service import _history_cache
 from app.services.yfinance_service import _overview_cache
 from app.services.yfinance_service import get_market_data
 from app.services.yfinance_service import get_ticker_overview
+from tests.mistral_mocks import mock_stream_async
 
 # ---------------------------------------------------------------------------
 # 1. Cache: empty list is cached (is not None fix)
@@ -138,7 +139,7 @@ def _mock_tool_response() -> MagicMock:
 
 
 @pytest.mark.anyio
-@patch("app.agent.runner.dispatch_tool", new_callable=AsyncMock)
+@patch("app.agent.runner.dispatch_tool_with_display", new_callable=AsyncMock)
 @patch("app.agent.runner.settings")
 @patch("app.agent.runner.Mistral")
 async def test_agent_retries_when_no_tool_on_first_round(
@@ -158,8 +159,12 @@ async def test_agent_retries_when_no_tool_on_first_round(
             _mock_text_response("Based on data, AAPL is at $150."),
         ],
     )
+    mock_client.chat.stream_async = mock_stream_async("Based on data, AAPL is at $150.")
     mock_mistral_cls.return_value = mock_client
-    mock_dispatch.return_value = json.dumps({"symbol": "AAPL", "current_price": 150.0})
+    mock_dispatch.return_value = (
+        json.dumps({"symbol": "AAPL", "current_price": 150.0}),
+        [],
+    )
 
     events: list[str] = []
     async for chunk in run_agent(query="Tell me about AAPL", ticker="AAPL"):

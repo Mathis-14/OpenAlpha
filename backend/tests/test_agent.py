@@ -8,6 +8,8 @@ from httpx import AsyncClient
 from mistralai.client.models import FunctionCall
 from mistralai.client.models import ToolCall
 
+from tests.mistral_mocks import mock_stream_async
+
 
 def _parse_sse(body: str) -> list[dict[str, object]]:
     """Parse raw SSE text into a list of {event, data} dicts."""
@@ -56,7 +58,7 @@ def _mock_tool_response(
 
 
 @pytest.mark.anyio
-@patch("app.agent.runner.dispatch_tool", new_callable=AsyncMock)
+@patch("app.agent.runner.dispatch_tool_with_display", new_callable=AsyncMock)
 @patch("app.agent.runner.settings")
 @patch("app.agent.runner.Mistral")
 async def test_agent_no_tool_triggers_retry(
@@ -77,10 +79,14 @@ async def test_agent_no_tool_triggers_retry(
             _mock_text_response("Based on the data, AAPL is at $150."),
         ],
     )
+    mock_client.chat.stream_async = mock_stream_async(
+        "Based on the data, AAPL is at $150.",
+    )
     mock_mistral_cls.return_value = mock_client
 
-    mock_dispatch.return_value = json.dumps(
-        {"symbol": "AAPL", "current_price": 150.0},
+    mock_dispatch.return_value = (
+        json.dumps({"symbol": "AAPL", "current_price": 150.0}),
+        [],
     )
 
     response = await client.post(
@@ -94,7 +100,7 @@ async def test_agent_no_tool_triggers_retry(
 
     assert "tool_call" in event_types
     assert "tool_result" in event_types
-    assert "text" in event_types
+    assert "text_delta" in event_types
     assert "done" in event_types
     assert mock_client.chat.complete_async.await_count == 3
 
@@ -118,6 +124,7 @@ async def test_agent_no_tool_after_retry_yields_text(
             _mock_text_response("AAPL is trading at $150."),
         ],
     )
+    mock_client.chat.stream_async = mock_stream_async("AAPL is trading at $150.")
     mock_mistral_cls.return_value = mock_client
 
     response = await client.post(
@@ -130,13 +137,13 @@ async def test_agent_no_tool_after_retry_yields_text(
     event_types = [e["event"] for e in events]
 
     assert "tool_call" not in event_types
-    assert "text" in event_types
+    assert "text_delta" in event_types
     assert "done" in event_types
     assert mock_client.chat.complete_async.await_count == 2
 
 
 @pytest.mark.anyio
-@patch("app.agent.runner.dispatch_tool", new_callable=AsyncMock)
+@patch("app.agent.runner.dispatch_tool_with_display", new_callable=AsyncMock)
 @patch("app.agent.runner.settings")
 @patch("app.agent.runner.Mistral")
 async def test_agent_with_tool_call(
@@ -155,10 +162,16 @@ async def test_agent_with_tool_call(
             _mock_text_response("AAPL is at $150 with a P/E of 25."),
         ],
     )
+    mock_client.chat.stream_async = mock_stream_async(
+        "AAPL is at $150 with a P/E of 25.",
+    )
     mock_mistral_cls.return_value = mock_client
 
-    mock_dispatch.return_value = json.dumps(
-        {"symbol": "AAPL", "current_price": 150.0, "change_percent": 1.2},
+    mock_dispatch.return_value = (
+        json.dumps(
+            {"symbol": "AAPL", "current_price": 150.0, "change_percent": 1.2},
+        ),
+        [],
     )
 
     response = await client.post(
@@ -172,7 +185,7 @@ async def test_agent_with_tool_call(
 
     assert "tool_call" in event_types
     assert "tool_result" in event_types
-    assert "text" in event_types
+    assert "text_delta" in event_types
     assert "done" in event_types
 
     tool_call_event = next(e for e in events if e["event"] == "tool_call")
@@ -211,7 +224,7 @@ async def test_agent_empty_query_returns_422(client: AsyncClient):
 
 
 @pytest.mark.anyio
-@patch("app.agent.runner.dispatch_tool", new_callable=AsyncMock)
+@patch("app.agent.runner.dispatch_tool_with_display", new_callable=AsyncMock)
 @patch("app.agent.runner.settings")
 @patch("app.agent.runner.Mistral")
 async def test_agent_tool_failure_continues(
@@ -230,6 +243,9 @@ async def test_agent_tool_failure_continues(
             _mock_tool_response(),
             _mock_text_response("I could not retrieve the data."),
         ],
+    )
+    mock_client.chat.stream_async = mock_stream_async(
+        "I could not retrieve the data.",
     )
     mock_mistral_cls.return_value = mock_client
 
@@ -251,5 +267,5 @@ async def test_agent_tool_failure_continues(
     assert isinstance(result_event["data"], dict)
     assert result_event["data"]["success"] is False
 
-    assert "text" in event_types
+    assert "text_delta" in event_types
     assert "done" in event_types

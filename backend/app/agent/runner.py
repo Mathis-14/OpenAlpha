@@ -15,15 +15,17 @@ from mistralai.client.models import UserMessage
 
 from app.agent.prompts import SYSTEM_PROMPT
 from app.agent.tools import TOOL_DEFINITIONS
-from app.agent.tools import dispatch_tool
+from app.agent.tools import dispatch_tool_with_display
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 _MAX_TOOL_ROUNDS = 10
 _LLM_TIMEOUT = 30.0
+_STREAM_TIMEOUT = 60.0
+_MAX_TOKENS = 1024
 _TOOL_REQUIRED_MSG = (
-    "You must call at least one tool before answering. " "Do not answer from memory."
+    "You must call at least one tool before answering. Do not answer from memory."
 )
 
 Messages = list[SystemMessage | UserMessage | AssistantMessage | ToolMessage]
@@ -57,6 +59,84 @@ def _build_tools() -> list[Tool]:
     return tools
 
 
+async def _process_tool_calls(
+    tool_calls: list[ToolCall],
+    messages: Messages,
+) -> AsyncGenerator[str, None]:
+    """Execute tool calls and yield SSE events including display hints."""
+    for tc in tool_calls:
+        fn_name = tc.function.name
+        raw_args = tc.function.arguments
+        try:
+            fn_args: dict[str, Any] = json.loads(
+                raw_args if isinstance(raw_args, str) else json.dumps(raw_args)
+            )
+        except (json.JSONDecodeError, TypeError):
+            fn_args = {}
+
+        yield _sse("tool_call", {"name": fn_name, "arguments": fn_args})
+
+        try:
+            result_str, display_events = await dispatch_tool_with_display(
+                fn_name, fn_args
+            )
+            yield _sse("tool_result", {"name": fn_name, "success": True})
+            for disp in display_events:
+                yield _sse(disp["type"], disp["data"])
+        except Exception as exc:
+            logger.exception("Tool %s failed", fn_name)
+            result_str = json.dumps({"error": str(exc)})
+            yield _sse(
+                "tool_result",
+                {"name": fn_name, "success": False, "error": str(exc)},
+            )
+
+        messages.append(
+            ToolMessage(
+                name=fn_name,
+                content=result_str,
+                tool_call_id=tc.id,
+            )
+        )
+
+
+async def _stream_final_answer(
+    client: Mistral,
+    messages: Messages,
+) -> AsyncGenerator[str, None]:
+    """Stream the final answer token-by-token as text_delta SSE events."""
+    try:
+        stream = await asyncio.wait_for(
+            client.chat.stream_async(
+                model=settings.mistral_model,
+                messages=messages,
+                max_tokens=_MAX_TOKENS,
+            ),
+            timeout=_LLM_TIMEOUT,
+        )
+    except TimeoutError:
+        yield _sse("error", {"message": "LLM streaming request timed out"})
+        return
+    except Exception as exc:
+        logger.exception("Mistral stream_async call failed")
+        yield _sse("error", {"message": f"LLM stream failed: {exc}"})
+        return
+
+    try:
+        async for event in stream:
+            chunk = event.data
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta.content:
+                content = str(delta.content)
+                if content:
+                    yield _sse("text_delta", {"content": content})
+    except Exception as exc:
+        logger.exception("Error during stream consumption")
+        yield _sse("error", {"message": f"Stream error: {exc}"})
+
+
 async def run_agent(
     query: str,
     ticker: str | None = None,
@@ -66,7 +146,8 @@ async def run_agent(
     Event types:
         tool_call   - agent is invoking a tool  (name, arguments)
         tool_result - tool execution finished    (name, success)
-        text        - final text from the model  (content)
+        text_delta  - incremental text token     (content)
+        text        - full text (fallback)       (content)
         done        - stream complete            ({})
         error       - something went wrong       (message)
     """
@@ -92,6 +173,7 @@ async def run_agent(
                     messages=messages,
                     tools=sdk_tools,
                     tool_choice="auto",
+                    max_tokens=_MAX_TOKENS,
                 ),
                 timeout=_LLM_TIMEOUT,
             )
@@ -122,8 +204,10 @@ async def run_agent(
                 )
                 messages.append(UserMessage(content=_TOOL_REQUIRED_MSG))
                 continue
-            content = str(msg.content) if msg.content else ""
-            yield _sse("text", {"content": content})
+
+            # Stream the final answer token-by-token
+            async for sse_event in _stream_final_answer(client, messages):
+                yield sse_event
             break
 
         any_tool_called = True
@@ -134,39 +218,8 @@ async def run_agent(
             )
         )
 
-        for tc in tool_calls:
-            fn_name = tc.function.name
-            raw_args = tc.function.arguments
-            try:
-                fn_args: dict[str, Any] = json.loads(
-                    raw_args if isinstance(raw_args, str) else json.dumps(raw_args)
-                )
-            except (json.JSONDecodeError, TypeError):
-                fn_args = {}
-
-            yield _sse("tool_call", {"name": fn_name, "arguments": fn_args})
-
-            try:
-                result_str = await dispatch_tool(fn_name, fn_args)
-                yield _sse(
-                    "tool_result",
-                    {"name": fn_name, "success": True},
-                )
-            except Exception as exc:
-                logger.exception("Tool %s failed", fn_name)
-                result_str = json.dumps({"error": str(exc)})
-                yield _sse(
-                    "tool_result",
-                    {"name": fn_name, "success": False, "error": str(exc)},
-                )
-
-            messages.append(
-                ToolMessage(
-                    name=fn_name,
-                    content=result_str,
-                    tool_call_id=tc.id,
-                )
-            )
+        async for event in _process_tool_calls(tool_calls, messages):
+            yield event
     else:
         yield _sse(
             "error",

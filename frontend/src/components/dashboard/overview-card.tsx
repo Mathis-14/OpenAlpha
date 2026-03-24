@@ -30,7 +30,7 @@ export default function OverviewCard({ data }: { data: TickerOverview }) {
   const Arrow = positive ? ArrowUp : ArrowDown;
 
   return (
-    <Card className="border-border/40 bg-card/60">
+    <Card className="border-border/40 bg-card/60 transition-colors hover:border-primary/20">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div>

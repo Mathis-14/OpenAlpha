@@ -4,6 +4,7 @@ import Image from "next/image";
 import Aurora from "@/components/Aurora";
 import ChartLines from "@/components/chart-lines";
 import TickerSearch from "@/components/ticker-search";
+import AgentChat from "@/components/dashboard/agent-chat";
 
 const FEATURES = [
   {
@@ -46,7 +47,7 @@ export default function LandingPage() {
       <div className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-t from-background via-background/80 to-transparent" />
 
       {/* Content */}
-      <main className="relative z-10 flex w-full max-w-3xl flex-col items-center gap-8 px-6 py-24 text-center">
+      <main className="relative z-10 flex w-full max-w-4xl flex-col items-center gap-8 px-6 py-24 text-center">
         {/* Brand */}
         <div className="flex flex-col items-center gap-4">
           <span className="inline-block rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-medium tracking-widest text-primary uppercase">
@@ -75,8 +76,15 @@ export default function LandingPage() {
           <TickerSearch size="lg" autoFocus />
         </div>
 
+        {/* Agent chat */}
+        <div className="w-full max-w-2xl text-left">
+          <div className="h-[480px]">
+            <AgentChat />
+          </div>
+        </div>
+
         {/* Feature grid */}
-        <div className="mt-8 grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="mt-4 grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
           {FEATURES.map((feature) => (
             <div
               key={feature.title}
@@ -99,7 +107,7 @@ export default function LandingPage() {
             href="https://github.com/Mathis-14/OpenAlpha"
             target="_blank"
             rel="noopener noreferrer"
-            className="underline underline-offset-2 hover:text-primary transition-colors"
+            className="underline underline-offset-2 transition-colors hover:text-primary"
           >
             View on GitHub
           </a>
