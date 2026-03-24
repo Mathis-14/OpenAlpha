@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   BrainCircuit,
@@ -39,6 +40,7 @@ const FEATURE_CARDS = [
 ];
 
 export default function LandingPage() {
+  const router = useRouter();
   const [showAgent, setShowAgent] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
   const agentShellRef = useRef<HTMLDivElement>(null);
@@ -105,21 +107,16 @@ export default function LandingPage() {
 
           <button
             type="button"
-            disabled
-            className="flex cursor-not-allowed items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left opacity-80"
+            onClick={() => router.push("/macro")}
+            className="flex items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
           >
-            <div className="mt-0.5 rounded-[10px] bg-[#f6f7f8] p-2 text-black/46">
+            <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
               <Globe className="h-4 w-4" />
             </div>
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-[#161616]">
-                  Browse macro
-                </p>
-                <span className="rounded-full border border-black/[0.08] bg-white px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-black/42">
-                  Soon
-                </span>
-              </div>
+              <p className="text-sm font-medium text-[#161616]">
+                Browse macro
+              </p>
               <p className="text-sm font-light leading-6 text-black/62">
                 Explore rates, inflation, and growth data.
               </p>
