@@ -146,18 +146,24 @@
 @keyframes heroLogoReveal {
   from {
     opacity: 0;
-    transform: translateY(18px) scale(0.95);
+    transform: translateY(0) scale(1.95);
     filter: blur(10px);
-  }
-  55% {
-    opacity: 1;
-    transform: translateY(0) scale(1.015);
-    filter: blur(0);
   }
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
     filter: blur(0);
+  }
+}
+
+@keyframes heroLogoGlow {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.8);
+  }
+  to {
+    opacity: 0.34;
+    transform: translateY(-50%) scale(1);
   }
 }
 
