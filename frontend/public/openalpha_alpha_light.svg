@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 152 160" width="152" height="160">
+  <defs>
+    <linearGradient id="dfill-light" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F9FCFF"/>
+      <stop offset="100%" stop-color="#EDF5FF"/>
+    </linearGradient>
+    <linearGradient id="dstroke-light" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4AB7FF"/>
+      <stop offset="100%" stop-color="#007BFF"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(76, 80)">
+    <polygon points="0,-76 76,0 0,76 -76,0" fill="url(#dfill-light)" stroke="url(#dstroke-light)" stroke-width="1.8" stroke-linejoin="round"/>
+  </g>
+  <g transform="translate(44.5, 24.7)" fill="#0D80FF">
+    <path d="M43.63 38.75L43.63 38.75Q46.91 35.59 50.63 33.59L50.63 33.59L55.66 33.59L55.66 35.31Q51.02 39.02 48.67 42.89L48.67 42.89Q47.89 44.22 46.17 48.87L46.17 48.87L48.32 61.60Q49.73 70.04 53.13 70.20L53.13 70.20Q56.48 70.35 59.65 67.77L59.65 67.77L59.65 73.83Q48.91 78.09 41.48 73.36L41.48 73.36Q40.08 72.46 38.67 71.05L38.67 71.05Q37.27 73.32 34.14 74.65L34.14 74.65Q30.59 76.25 24.77 76.25L24.77 76.25Q13.40 76.25 8.34 70.39Q3.28 64.53 3.28 54.34L3.28 54.34Q3.28 44.18 8.36 38.28L8.36 38.28Q13.36 32.46 25.78 32.62L25.78 32.62Q39.41 32.70 43.63 38.75ZM34.41 61.02L34.41 61.02L32.46 44.65Q31.80 38.95 26.48 38.55L26.48 38.55Q22.34 38.24 20.47 41.99L20.47 41.99Q18.71 45.39 18.71 54.34Q18.71 63.28 20.47 66.72L20.47 66.72Q22.27 70.20 26.48 70.16L26.48 70.16Q30.63 70.12 32.46 66.91L32.46 66.91Q32.93 66.09 34.41 61.02Z"/>
+  </g>
+</svg>

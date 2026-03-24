@@ -30,20 +30,24 @@ export default function OverviewCard({ data }: { data: TickerOverview }) {
   const Arrow = positive ? ArrowUp : ArrowDown;
 
   return (
-    <Card className="border-border/40 bg-card/60 transition-colors hover:border-primary/20">
+    <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] transition-colors hover:border-black/[0.12]">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div>
-            <CardTitle className="text-2xl font-bold tracking-tight">
+            <CardTitle className="text-2xl font-medium tracking-tight text-[#161616]">
               {data.name}
             </CardTitle>
-            <p className="mt-0.5 text-sm text-muted-foreground">
+            <p className="mt-0.5 text-sm font-light text-black/56">
               {data.symbol} · {data.exchange} · {data.currency}
             </p>
           </div>
           <Badge
-            variant={positive ? "default" : "destructive"}
-            className={positive ? "bg-positive text-white" : ""}
+            variant="outline"
+            className={
+              positive
+                ? "border-transparent bg-[#1080ff] text-white"
+                : "border-transparent bg-[#ffe8e5] text-[#b93828]"
+            }
           >
             <Arrow className="mr-0.5 h-3 w-3" />
             {fmt(Math.abs(data.change_percent), { maximumFractionDigits: 2 })}%
@@ -52,11 +56,11 @@ export default function OverviewCard({ data }: { data: TickerOverview }) {
       </CardHeader>
       <CardContent>
         <div className="flex items-baseline gap-3">
-          <span className="text-4xl font-bold tabular-nums tracking-tight">
+          <span className="text-4xl font-medium tabular-nums tracking-tight text-[#161616]">
             {fmtPrice(data.current_price, data.currency)}
           </span>
           <span
-            className={`text-sm font-medium ${positive ? "text-positive" : "text-negative"}`}
+            className={`text-sm font-medium ${positive ? "text-[#1080ff]" : "text-[#b93828]"}`}
           >
             {positive ? "+" : ""}
             {fmt(data.change, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -84,8 +88,8 @@ export default function OverviewCard({ data }: { data: TickerOverview }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-muted-foreground">{label}</p>
-      <p className="font-medium tabular-nums">{value}</p>
+      <p className="text-black/52">{label}</p>
+      <p className="font-medium tabular-nums text-[#161616]">{value}</p>
     </div>
   );
 }

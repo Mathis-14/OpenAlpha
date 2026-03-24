@@ -5,14 +5,16 @@ import { cn } from "@/lib/utils";
 
 interface AgentAlphaIconProps {
   className?: string;
+  tone?: "default" | "light";
 }
 
 export default function AgentAlphaIcon({
   className = "",
+  tone = "default",
 }: AgentAlphaIconProps) {
   return (
     <Image
-      src="/openalpha_alpha.svg"
+      src={tone === "light" ? "/openalpha_alpha_light.svg" : "/openalpha_alpha.svg"}
       alt=""
       aria-hidden="true"
       width={28}
