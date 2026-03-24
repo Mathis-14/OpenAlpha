@@ -82,12 +82,35 @@ export function getNews(
   return fetchJson(`/api/news/${ticker}?limit=${limit}`);
 }
 
+// ── Search ───────────────────────────────────────────────────────────────────
+
+export interface SearchResult {
+  symbol: string;
+  name: string;
+}
+
+export async function searchTickers(
+  query: string,
+  signal?: AbortSignal,
+): Promise<SearchResult[]> {
+  const res = await fetch(
+    `${BASE_URL}/api/search?q=${encodeURIComponent(query)}`,
+    { signal },
+  );
+  if (!res.ok) return [];
+  return res.json() as Promise<SearchResult[]>;
+}
+
 // ── Agent SSE ────────────────────────────────────────────────────────────────
 
 export type AgentEventType =
   | "tool_call"
   | "tool_result"
   | "text"
+  | "text_delta"
+  | "display_chart"
+  | "display_metric"
+  | "display_table"
   | "done"
   | "error";
 
