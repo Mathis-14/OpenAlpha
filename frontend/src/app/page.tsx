@@ -100,7 +100,7 @@ export default function LandingPage() {
         <section className="flex w-full max-w-[1080px] flex-col items-center gap-8">
           <div
             className="flex flex-wrap items-center justify-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md animate-[fadeSlideUp_0.65s_ease-out_both]"
-            style={{ animationDelay: "40ms" }}
+            style={{ animationDelay: "2200ms" }}
           >
             <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.24em] text-primary">
               <Radar className="h-3.5 w-3.5" />
@@ -109,18 +109,21 @@ export default function LandingPage() {
           </div>
 
           <div className="flex flex-col items-center gap-5">
-            <Image
-              src="/openalpha_logo.svg"
-              alt="OpenAlpha"
-              width={880}
-              height={250}
-              priority
-              className="h-auto w-[320px] animate-[heroLogoReveal_0.95s_cubic-bezier(0.16,1,0.3,1)_both] sm:w-[440px] lg:w-[620px]"
-            />
+            <div className="relative flex justify-center">
+              <div className="pointer-events-none absolute inset-x-8 top-1/2 h-28 -translate-y-1/2 rounded-full bg-primary/20 blur-3xl animate-[heroLogoGlow_3.6s_cubic-bezier(0.19,1,0.22,1)_both]" />
+              <Image
+                src="/openalpha_logo.svg"
+                alt="OpenAlpha"
+                width={880}
+                height={250}
+                priority
+                className="relative h-auto w-[320px] animate-[heroLogoReveal_3.8s_cubic-bezier(0.19,1,0.22,1)_both] sm:w-[440px] lg:w-[620px]"
+              />
+            </div>
 
             <div
               className="max-w-3xl space-y-5 animate-[fadeSlideUp_0.7s_ease-out_both]"
-              style={{ animationDelay: "140ms" }}
+              style={{ animationDelay: "2500ms" }}
             >
               <p className="text-lg leading-8 text-foreground/90 sm:text-[1.4rem]">
                 Market intelligence with a cleaner workflow. Start with the
@@ -146,7 +149,7 @@ export default function LandingPage() {
               <div
                 ref={agentShellRef}
                 className="animate-[fadeSlideUp_0.75s_ease-out_both]"
-                style={{ animationDelay: "40ms" }}
+                style={{ animationDelay: "2850ms" }}
               >
                 <div className="h-[640px] sm:h-[680px]">
                   <AgentChat variant="landing" />
@@ -155,7 +158,7 @@ export default function LandingPage() {
             ) : (
               <div
                 className="rounded-[2rem] border border-white/[0.12] bg-[linear-gradient(180deg,rgba(16,20,43,0.82),rgba(8,10,22,0.78))] px-6 py-6 text-left shadow-[0_48px_110px_-62px_rgba(83,74,183,0.9)] backdrop-blur-xl animate-[fadeSlideUp_0.75s_ease-out_both] sm:px-7"
-                style={{ animationDelay: "40ms" }}
+                style={{ animationDelay: "2850ms" }}
               >
                 <div className="flex flex-col gap-5">
                   <div className="space-y-3">
