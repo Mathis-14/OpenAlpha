@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import TickerSearch from "@/components/ticker-search";
+import LandingSpotlight from "@/components/landing-spotlight";
 import OverviewCard from "@/components/dashboard/overview-card";
 import PriceChart from "@/components/dashboard/price-chart";
 import FundamentalsGrid from "@/components/dashboard/fundamentals-grid";
@@ -68,12 +69,12 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
           <FundamentalsGrid data={market.fundamentals} />
         </>
       ) : (
-        <Card className="border-destructive/40 bg-card/60">
+        <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
           <CardHeader>
-            <CardTitle className="text-destructive">{symbol}</CardTitle>
+            <CardTitle className="text-[#161616]">{symbol}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">{marketError}</p>
+            <p className="text-sm font-light text-black/64">{marketError}</p>
           </CardContent>
         </Card>
       )}
@@ -86,31 +87,37 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b border-border/40 bg-background/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-[1440px] items-center gap-4 px-6 py-3">
+    <div className="relative min-h-screen overflow-hidden bg-[#fafcff]">
+      <LandingSpotlight />
+      <div className="pointer-events-none absolute inset-0 z-[2] bg-[linear-gradient(180deg,rgba(255,255,255,0.6),rgba(247,251,255,0.84)_34%,rgba(247,251,255,0.98)_100%)]" />
+
+      <header className="sticky top-0 z-40 border-b border-black/[0.08] bg-white/88 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1280px] items-center gap-4 px-6 py-3">
           <Link
             href="/"
             className="shrink-0 transition-opacity hover:opacity-80"
           >
             <Image
-              src="/openalpha_logo.svg"
+              src="/openalpha_logo_light.svg"
               alt="OpenAlpha"
               width={680}
               height={200}
               className="h-8 w-auto"
             />
           </Link>
-          <div className="max-w-md flex-1">
-            <TickerSearch />
+          <div className="max-w-[360px] flex-1">
+            <TickerSearch variant="dashboard" />
           </div>
-          <Badge variant="outline" className="font-mono text-sm">
+          <Badge
+            variant="outline"
+            className="border-black/[0.08] bg-[#f4f8ff] font-mono text-sm text-[#161616]"
+          >
             {symbol}
           </Badge>
         </div>
       </header>
 
-      <main className="mx-auto max-w-[1440px] px-6 py-8">
+      <main className="relative z-10 mx-auto max-w-[1280px] px-6 py-8">
         <DashboardLayout
           dataWidgets={dataWidgets}
           agentPanel={<AgentChat ticker={symbol} />}
