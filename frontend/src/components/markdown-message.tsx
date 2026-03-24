@@ -16,7 +16,7 @@ export default function MarkdownMessage({
   className = "",
 }: MarkdownMessageProps) {
   return (
-    <div className={`markdown-message ${className}`}>
+    <div className={`markdown-message text-left ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex, rehypeHighlight]}

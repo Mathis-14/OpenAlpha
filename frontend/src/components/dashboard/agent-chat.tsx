@@ -2,14 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import AgentAlphaIcon from "@/components/agent-alpha-icon";
+import MarkdownMessage from "@/components/markdown-message";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { streamAgent, type AgentSSE } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import MarkdownMessage from "@/components/markdown-message";
 import {
   AlertTriangle,
   ArrowUpRight,
-  Bot,
   CheckCircle2,
   LayoutDashboard,
   Loader2,
@@ -235,7 +235,7 @@ export default function AgentChat({
           <div className="space-y-4 text-center">
             <div className="flex justify-center">
               <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.06] px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.24em] text-primary/90 backdrop-blur-md">
-                <Bot className="h-3.5 w-3.5" />
+                <AgentAlphaIcon className="h-[1.55rem] w-[1.55rem]" />
                 Speak to Alpha
               </span>
             </div>
@@ -252,7 +252,7 @@ export default function AgentChat({
           </div>
         ) : (
           <CardTitle className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-primary" />
+            <AgentAlphaIcon className="h-[1.75rem] w-[1.75rem]" />
             AI Agent
           </CardTitle>
         )}
@@ -261,7 +261,7 @@ export default function AgentChat({
       <CardContent
         className={cn(
           "flex min-h-0 flex-1 flex-col",
-          isLanding ? "gap-5 px-5 pb-5 sm:px-6 sm:pb-6" : "gap-3",
+          isLanding ? "gap-5 px-5 pb-5 text-left sm:px-6 sm:pb-6" : "gap-3",
         )}
       >
         <div
@@ -269,7 +269,7 @@ export default function AgentChat({
           className={cn(
             "min-h-0 flex-1 overflow-y-auto",
             isLanding
-              ? "space-y-5 px-1 pb-1 pt-1"
+              ? "space-y-5 px-1 pb-1 pt-1 text-left"
               : "space-y-4 rounded-lg bg-background/40 p-4",
           )}
         >
@@ -278,7 +278,7 @@ export default function AgentChat({
               className={cn(
                 "space-y-4",
                 isLanding &&
-                  "flex min-h-full flex-col items-center justify-center text-center",
+                  "mx-auto flex max-w-3xl flex-col items-center pt-4 text-center sm:pt-6",
               )}
             >
               <div className="space-y-4">
@@ -499,7 +499,7 @@ function MessageBubble({
     variant === "landing" ? getSuggestedTicker(entries) : null;
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2.5 text-left">
       {toolEntries.length > 0 && (
         <div className="space-y-1">
           {toolEntries.map((entry, i) => (
@@ -526,7 +526,7 @@ function MessageBubble({
       {message.content && (
         <div className="flex gap-2.5">
           <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15">
-            <Bot className="h-3.5 w-3.5 text-primary" />
+            <AgentAlphaIcon className="h-[1.45rem] w-[1.45rem]" />
           </div>
           <div className="min-w-0 flex-1 text-sm text-foreground/90">
             <MarkdownMessage content={message.content} />
@@ -559,7 +559,7 @@ function DashboardSuggestionCard({
   onOpen: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-primary/20 bg-primary/10 p-3 shadow-[0_24px_40px_-28px_rgba(83,74,183,0.9)]">
+    <div className="rounded-2xl border border-primary/20 bg-primary/10 p-3 text-left shadow-[0_24px_40px_-28px_rgba(83,74,183,0.9)]">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <p className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-primary/90">
@@ -629,7 +629,7 @@ function MetricDisplay({
   metrics: { label: string; value: string }[];
 }) {
   return (
-    <div className="grid grid-cols-2 gap-2 rounded-lg border border-border/40 bg-background/60 p-3">
+    <div className="grid grid-cols-2 gap-2 rounded-lg border border-border/40 bg-background/60 p-3 text-left">
       {metrics.map((m) => (
         <div key={m.label}>
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -662,7 +662,7 @@ function ChartDisplay({ entry }: { entry: DisplayChartEntry }) {
   const positive = closes[closes.length - 1] >= closes[0];
 
   return (
-    <div className="rounded-lg border border-border/40 bg-background/60 p-3">
+    <div className="rounded-lg border border-border/40 bg-background/60 p-3 text-left">
       <div className="mb-1 flex items-baseline justify-between">
         <span className="text-xs font-medium text-foreground">
           {entry.symbol}

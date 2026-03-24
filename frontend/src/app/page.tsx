@@ -5,13 +5,13 @@ import Image from "next/image";
 import {
   ArrowRight,
   BrainCircuit,
-  Bot,
   ChartNoAxesCombined,
   FileSearch,
   Globe,
   Radar,
   Search,
 } from "lucide-react";
+import AgentAlphaIcon from "@/components/agent-alpha-icon";
 import Aurora from "@/components/Aurora";
 import ChartLines from "@/components/chart-lines";
 import LandingSpotlight from "@/components/landing-spotlight";
@@ -163,7 +163,7 @@ export default function LandingPage() {
                 <div className="flex flex-col gap-5">
                   <div className="space-y-3">
                     <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.06] px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.24em] text-primary/90 backdrop-blur-md">
-                      <Bot className="h-3.5 w-3.5" />
+                      <AgentAlphaIcon className="h-[1.45rem] w-[1.45rem]" />
                       Speak to Alpha
                     </span>
                     <div className="space-y-1.5">
