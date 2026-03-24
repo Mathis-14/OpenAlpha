@@ -8,6 +8,7 @@ import PriceChart from "@/components/dashboard/price-chart";
 import FundamentalsGrid from "@/components/dashboard/fundamentals-grid";
 import NewsFeed from "@/components/dashboard/news-feed";
 import FilingsPanel from "@/components/dashboard/filings-panel";
+import AgentChat from "@/components/dashboard/agent-chat";
 import {
   getMarketData,
   getNews,
@@ -75,33 +76,48 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
-        <div className="space-y-6">
-          {market ? (
-            <>
-              <OverviewCard data={market.overview} />
-              <PriceChart
-                ticker={symbol}
-                initialData={market.price_history}
-                initialPeriod="1mo"
-              />
-              <FundamentalsGrid data={market.fundamentals} />
-            </>
-          ) : (
-            <Card className="border-destructive/40 bg-card/60">
-              <CardHeader>
-                <CardTitle className="text-destructive">{symbol}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">{marketError}</p>
-              </CardContent>
-            </Card>
-          )}
+      <main className="mx-auto max-w-[1440px] px-6 py-8">
+        <div className="flex gap-6">
+          {/* Left column — data widgets */}
+          <div className="min-w-0 flex-1 space-y-6">
+            {market ? (
+              <>
+                <OverviewCard data={market.overview} />
+                <PriceChart
+                  ticker={symbol}
+                  initialData={market.price_history}
+                  initialPeriod="1mo"
+                />
+                <FundamentalsGrid data={market.fundamentals} />
+              </>
+            ) : (
+              <Card className="border-destructive/40 bg-card/60">
+                <CardHeader>
+                  <CardTitle className="text-destructive">{symbol}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">{marketError}</p>
+                </CardContent>
+              </Card>
+            )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <NewsFeed articles={news.articles} />
-            <FilingsPanel filings={filings.filings} />
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <NewsFeed articles={news.articles} />
+              <FilingsPanel filings={filings.filings} />
+            </div>
           </div>
+
+          {/* Right column — AI agent (sticky, collapsible) */}
+          <aside className="hidden w-[380px] shrink-0 xl:block">
+            <div className="sticky top-20">
+              <AgentChat ticker={symbol} />
+            </div>
+          </aside>
+        </div>
+
+        {/* Agent chat below content on smaller screens */}
+        <div className="mt-6 xl:hidden">
+          <AgentChat ticker={symbol} />
         </div>
       </main>
     </div>
