@@ -221,8 +221,11 @@ async def _execute_tool(
                             "label": "Change",
                             "value": f"{overview.change_percent:+.2f}%",
                         },
-                        {"label": "Market Cap", "value": _compact(overview.market_cap)},
-                        {"label": "Volume", "value": _compact(overview.volume)},
+                        {
+                            "label": "Market Cap",
+                            "value": _compact_currency(overview.market_cap),
+                        },
+                        {"label": "Volume", "value": _compact_number(overview.volume)},
                     ],
                 },
             }
@@ -281,16 +284,25 @@ async def _execute_tool(
                     "metrics": [
                         {
                             "label": "Fed Funds",
-                            "value": f"{snapshot.fed_funds_rate.latest_value:.2f}%",
+                            "value": _format_indicator_value(
+                                snapshot.fed_funds_rate, decimals=2
+                            ),
                         },
-                        {"label": "CPI", "value": f"{snapshot.cpi.latest_value:.1f}%"},
+                        {
+                            "label": "CPI",
+                            "value": _format_indicator_value(snapshot.cpi, decimals=1),
+                        },
                         {
                             "label": "GDP Growth",
-                            "value": f"{snapshot.gdp_growth.latest_value:.1f}%",
+                            "value": _format_indicator_value(
+                                snapshot.gdp_growth, decimals=1
+                            ),
                         },
                         {
                             "label": "Unemployment",
-                            "value": f"{snapshot.unemployment.latest_value:.1f}%",
+                            "value": _format_indicator_value(
+                                snapshot.unemployment, decimals=1
+                            ),
                         },
                     ],
                 },
@@ -318,17 +330,31 @@ async def _execute_tool(
     return result, displays
 
 
-def _compact(n: float | int | None) -> str:
-    """Format a number in compact notation."""
+def _compact_number(n: float | int | None) -> str:
+    """Format a number in compact notation without assuming units."""
     if n is None:
         return "—"
     abs_n = abs(n)
     if abs_n >= 1_000_000_000_000:
-        return f"${n / 1_000_000_000_000:.1f}T"
+        return f"{n / 1_000_000_000_000:.1f}T"
     if abs_n >= 1_000_000_000:
-        return f"${n / 1_000_000_000:.1f}B"
+        return f"{n / 1_000_000_000:.1f}B"
     if abs_n >= 1_000_000:
-        return f"${n / 1_000_000:.1f}M"
+        return f"{n / 1_000_000:.1f}M"
     if abs_n >= 1_000:
-        return f"${n / 1_000:.1f}K"
-    return f"${n:.0f}"
+        return f"{n / 1_000:.1f}K"
+    return f"{n:.0f}"
+
+
+def _compact_currency(n: float | int | None) -> str:
+    """Format a number in compact notation as currency."""
+    compact = _compact_number(n)
+    if compact == "—":
+        return compact
+    return f"${compact}"
+
+
+def _format_indicator_value(indicator: Any, *, decimals: int) -> str:
+    """Format macro indicators according to their declared unit."""
+    suffix = "%" if indicator.unit == "%" else ""
+    return f"{indicator.latest_value:.{decimals}f}{suffix}"
