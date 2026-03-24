@@ -9,6 +9,7 @@ from mistralai.client.models import FunctionCall
 from mistralai.client.models import ToolCall
 
 from tests.mistral_mocks import mock_stream_async
+from tests.mistral_mocks import mock_stream_async_with_pause
 
 
 def _parse_sse(body: str) -> list[dict[str, object]]:
@@ -193,6 +194,50 @@ async def test_agent_with_tool_call(
     assert tool_call_event["data"]["name"] == "get_stock_overview"
 
     mock_dispatch.assert_awaited_once()
+
+
+@pytest.mark.anyio
+@patch("app.agent.runner._STREAM_TIMEOUT", 0.01)
+@patch("app.agent.runner.settings")
+@patch("app.agent.runner.Mistral")
+async def test_agent_stream_timeout_returns_error_after_partial_text(
+    mock_mistral_cls: MagicMock,
+    mock_settings: MagicMock,
+    client: AsyncClient,
+):
+    mock_settings.mistral_api_key = "test-key"
+    mock_settings.mistral_model = "mistral-small-latest"
+
+    mock_client = MagicMock()
+    mock_client.chat.complete_async = AsyncMock(
+        side_effect=[
+            _mock_text_response("AAPL is up today."),
+            _mock_text_response("AAPL remains strong."),
+        ],
+    )
+    mock_client.chat.stream_async = mock_stream_async_with_pause(
+        first_content="Partial answer.",
+        second_content="This chunk should never arrive.",
+        pause_seconds=0.1,
+    )
+    mock_mistral_cls.return_value = mock_client
+
+    response = await client.post(
+        "/api/agent",
+        json={"query": "Tell me about AAPL", "ticker": "AAPL"},
+    )
+
+    assert response.status_code == 200
+    events = _parse_sse(response.text)
+    event_types = [e["event"] for e in events]
+
+    assert "text_delta" in event_types
+    assert "error" in event_types
+    assert "done" in event_types
+
+    error_event = next(e for e in events if e["event"] == "error")
+    assert isinstance(error_event["data"], dict)
+    assert "timed out" in str(error_event["data"]["message"])
 
 
 @pytest.mark.anyio

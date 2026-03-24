@@ -123,7 +123,15 @@ async def _stream_final_answer(
         return
 
     try:
-        async for event in stream:
+        stream_iter = aiter(stream)
+        while True:
+            try:
+                event = await asyncio.wait_for(
+                    anext(stream_iter), timeout=_STREAM_TIMEOUT
+                )
+            except StopAsyncIteration:
+                break
+
             chunk = event.data
             if not chunk.choices:
                 continue
@@ -132,6 +140,11 @@ async def _stream_final_answer(
                 content = str(delta.content)
                 if content:
                     yield _sse("text_delta", {"content": content})
+    except TimeoutError:
+        logger.warning("Mistral stream timed out during consumption")
+        yield _sse(
+            "error", {"message": "LLM stream timed out during response generation"}
+        )
     except Exception as exc:
         logger.exception("Error during stream consumption")
         yield _sse("error", {"message": f"Stream error: {exc}"})
