@@ -109,6 +109,7 @@ export default function AgentChat({
 
   const isLanding = variant === "landing";
   const landingCompactEmpty = isLanding && messages.length === 0 && !streaming;
+  const landingHasConversation = isLanding && (messages.length > 0 || streaming);
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -239,7 +240,9 @@ export default function AgentChat({
               "rounded-[16px] border-black/[0.08] bg-white shadow-[0_34px_70px_-40px_rgba(0,0,0,0.12)]",
               landingCompactEmpty
                 ? "min-h-[300px] sm:min-h-[320px]"
-                : "h-[420px] sm:h-[460px]",
+                : landingHasConversation
+                  ? "h-[min(70vh,560px)] sm:h-[min(72vh,620px)]"
+                  : "h-[420px] sm:h-[460px]",
             )
           : "h-full rounded-[16px] border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]",
       )}
@@ -287,7 +290,7 @@ export default function AgentChat({
               ? landingCompactEmpty
                 ? "space-y-3 px-1 pb-0 pt-0 text-left"
                 : "min-h-0 flex-1 overflow-y-auto space-y-4 px-1 pb-1 pt-0 text-left"
-              : "space-y-4 rounded-[14px] border border-black/[0.08] bg-[#f8fbff] p-4",
+              : "min-h-0 flex-1 overflow-y-auto space-y-4 rounded-[14px] border border-black/[0.08] bg-[#f8fbff] p-4 pr-3",
           )}
         >
           {showSuggestions && (
@@ -567,6 +570,7 @@ function MessageBubble({
             <MarkdownMessage
               content={message.content}
               tone={variant === "landing" || variant === "dashboard" ? "light" : "default"}
+              streaming={streaming}
             />
           </div>
         </div>
