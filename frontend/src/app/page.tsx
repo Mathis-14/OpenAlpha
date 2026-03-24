@@ -1,7 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import Aurora from "@/components/Aurora";
-import SplitText from "@/components/SplitText";
+import ChartLines from "@/components/chart-lines";
 import TickerSearch from "@/components/ticker-search";
 
 const FEATURES = [
@@ -29,37 +30,39 @@ export default function LandingPage() {
       {/* Aurora background */}
       <div className="pointer-events-none absolute inset-0 z-0">
         <Aurora
-          colorStops={["#6366f1", "#22c55e", "#6366f1"]}
+          colorStops={["#3C3489", "#9B93F5", "#534AB7"]}
           amplitude={1.2}
           blend={0.6}
           speed={0.4}
         />
       </div>
 
+      {/* Full-width chart lines (same style as logo SVG) */}
+      <div className="pointer-events-none absolute inset-0 z-[1]">
+        <ChartLines />
+      </div>
+
       {/* Gradient overlay for readability */}
-      <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-t from-background via-background/80 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 z-[2] bg-gradient-to-t from-background via-background/80 to-transparent" />
 
       {/* Content */}
       <main className="relative z-10 flex w-full max-w-3xl flex-col items-center gap-8 px-6 py-24 text-center">
         {/* Brand */}
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-4">
           <span className="inline-block rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-medium tracking-widest text-primary uppercase">
             Open Source
           </span>
 
-          <SplitText
-            text="OpenAlpha"
-            tag="h1"
-            className="text-6xl font-bold tracking-tight text-foreground sm:text-7xl"
-            delay={40}
-            duration={0.8}
-            ease="power3.out"
-            splitType="chars"
-            from={{ opacity: 0, y: 30 }}
-            to={{ opacity: 1, y: 0 }}
-            threshold={0.1}
-            rootMargin="-50px"
-          />
+          <h1 className="animate-[fadeSlideUp_0.8s_ease-out_both]">
+            <Image
+              src="/openalpha_logo.svg"
+              alt="OpenAlpha"
+              width={680}
+              height={200}
+              className="h-auto w-[280px] sm:w-[340px]"
+              priority
+            />
+          </h1>
 
           <p className="max-w-lg text-lg text-muted-foreground leading-relaxed">
             AI-powered financial intelligence. Analyze any stock with real-time

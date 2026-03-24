@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,11 +17,14 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
       {/* Top bar */}
       <header className="sticky top-0 z-40 border-b border-border/40 bg-background/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-3">
-          <Link
-            href="/"
-            className="text-lg font-bold tracking-tight text-foreground hover:text-primary transition-colors"
-          >
-            OpenAlpha
+          <Link href="/" className="shrink-0 transition-opacity hover:opacity-80">
+            <Image
+              src="/openalpha_logo.svg"
+              alt="OpenAlpha"
+              width={680}
+              height={200}
+              className="h-8 w-auto"
+            />
           </Link>
           <div className="flex-1 max-w-md">
             <TickerSearch />
