@@ -6,6 +6,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Filing } from "@/types/api";
 import { ChevronRight, ExternalLink, FileText } from "lucide-react";
 
@@ -28,10 +29,14 @@ export default function FilingsPanel({ filings }: { filings: Filing[] }) {
       <CardHeader>
         <CardTitle>SEC Filings</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
-        {filings.map((filing) => (
-          <FilingItem key={filing.accession_number} filing={filing} />
-        ))}
+      <CardContent>
+        <ScrollArea className="h-[400px]">
+          <div className="space-y-2 pr-3">
+            {filings.map((filing) => (
+              <FilingItem key={filing.accession_number} filing={filing} />
+            ))}
+          </div>
+        </ScrollArea>
       </CardContent>
     </Card>
   );
