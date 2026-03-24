@@ -1,7 +1,5 @@
+import { getApiBaseUrl } from "@/lib/api-base";
 import type { AgentEvent, AgentEventType, AgentRequest } from "@/types/api";
-
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /**
  * Stream agent responses via POST + Server-Sent Events.
@@ -13,7 +11,7 @@ export async function* streamAgent(
   request: AgentRequest,
   signal?: AbortSignal,
 ): AsyncGenerator<AgentEvent> {
-  const res = await fetch(`${BASE_URL}/api/agent`, {
+  const res = await fetch(`${getApiBaseUrl()}/api/agent`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),

@@ -1,3 +1,4 @@
+import { getApiBaseUrl } from "@/lib/api-base";
 import type {
   FilingsResponse,
   Fundamentals,
@@ -8,9 +9,6 @@ import type {
   PricePoint,
   TickerOverview,
 } from "@/types/api";
-
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 class ApiError extends Error {
   constructor(
@@ -23,7 +21,7 @@ class ApiError extends Error {
 }
 
 async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`);
+  const res = await fetch(`${getApiBaseUrl()}${path}`);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new ApiError(res.status, body || res.statusText);
@@ -94,7 +92,7 @@ export async function searchTickers(
   signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   const res = await fetch(
-    `${BASE_URL}/api/search?q=${encodeURIComponent(query)}`,
+    `${getApiBaseUrl()}/api/search?q=${encodeURIComponent(query)}`,
     { signal },
   );
   if (!res.ok) return [];
@@ -124,7 +122,7 @@ export async function* streamAgent(
   ticker?: string,
   signal?: AbortSignal,
 ): AsyncGenerator<AgentSSE> {
-  const res = await fetch(`${BASE_URL}/api/agent`, {
+  const res = await fetch(`${getApiBaseUrl()}/api/agent`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query, ticker }),
