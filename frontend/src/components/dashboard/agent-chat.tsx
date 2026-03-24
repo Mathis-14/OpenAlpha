@@ -171,7 +171,7 @@ export default function AgentChat({ ticker }: { ticker?: string }) {
           const updated = [...prev];
           updated[updated.length - 1] = {
             role: "assistant",
-            content: "",
+            content: runningText,
             entries: [...entries],
           };
           return updated;

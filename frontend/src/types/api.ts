@@ -124,6 +124,10 @@ export interface AgentRequest {
 export type AgentEventType =
   | "tool_call"
   | "tool_result"
+  | "text_delta"
+  | "display_chart"
+  | "display_metric"
+  | "display_table"
   | "text"
   | "done"
   | "error";
