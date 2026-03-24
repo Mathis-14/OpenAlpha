@@ -135,7 +135,7 @@
 @keyframes fadeSlideUp {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -146,8 +146,8 @@
 @keyframes heroLogoReveal {
   from {
     opacity: 0;
-    transform: translateY(0) scale(1.95);
-    filter: blur(10px);
+    transform: translateY(0) scale(1.6);
+    filter: blur(8px);
   }
   to {
     opacity: 1;
@@ -162,7 +162,7 @@
     transform: translateY(-50%) scale(0.8);
   }
   to {
-    opacity: 0.34;
+    opacity: 0.12;
     transform: translateY(-50%) scale(1);
   }
 }

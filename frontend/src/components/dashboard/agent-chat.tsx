@@ -89,6 +89,12 @@ const GENERAL_SUGGESTIONS = [
   "Summarize the latest macro outlook",
 ];
 
+const LANDING_SUGGESTIONS = [
+  "What's Nvidia's current price trend?",
+  "What are the latest U.S. inflation data?",
+  "How is Bitcoin performing this week?",
+];
+
 export default function AgentChat({
   ticker,
   variant = "dashboard",
@@ -102,6 +108,7 @@ export default function AgentChat({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isLanding = variant === "landing";
+  const landingCompactEmpty = isLanding && messages.length === 0 && !streaming;
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -199,7 +206,11 @@ export default function AgentChat({
     abortRef.current?.abort();
   }
 
-  const suggestions = ticker ? TICKER_SUGGESTIONS : GENERAL_SUGGESTIONS;
+  const suggestions = ticker
+    ? TICKER_SUGGESTIONS
+    : isLanding
+      ? LANDING_SUGGESTIONS
+      : GENERAL_SUGGESTIONS;
   const showSuggestions = messages.length === 0 && !streaming;
 
   const placeholderText = ticker
@@ -209,44 +220,44 @@ export default function AgentChat({
   const introText = ticker ? (
     <>
       Ask anything about{" "}
-      <span className="font-medium text-foreground">{ticker}</span>. The agent
-      will fetch real data before answering.
+      <span className={isLanding ? "font-medium text-[#161616]" : "font-medium text-foreground"}>
+        {ticker}
+      </span>
+      . The agent will fetch real data before answering.
     </>
   ) : (
     "Ask about any stock, market trends, or economic indicators. The agent will fetch real data before answering."
   );
+  const showLandingIntro = !isLanding || Boolean(ticker);
 
   return (
     <Card
       className={cn(
-        "flex h-full flex-col overflow-hidden border backdrop-blur-xl",
+        "flex flex-col overflow-hidden border backdrop-blur-xl",
         isLanding
-          ? "rounded-[2.2rem] border-white/[0.12] bg-[linear-gradient(180deg,rgba(16,20,43,0.88),rgba(8,10,22,0.84))] shadow-[0_56px_130px_-56px_rgba(83,74,183,0.88)]"
-          : "border-border/40 bg-card/60",
+          ? cn(
+              "rounded-[1.75rem] border-black/[0.08] bg-white shadow-[0_34px_70px_-40px_rgba(0,0,0,0.12)]",
+              landingCompactEmpty
+                ? "min-h-[300px] sm:min-h-[320px]"
+                : "h-[420px] sm:h-[460px]",
+            )
+          : "h-full border-border/40 bg-card/60",
       )}
     >
       <CardHeader
         className={cn(
           "shrink-0",
-          isLanding ? "pb-3 pt-7" : "pb-3",
+          isLanding ? "pb-1.5 pt-4" : "pb-3",
         )}
       >
         {isLanding ? (
-          <div className="space-y-4 text-center">
-            <div className="flex justify-center">
-              <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.06] px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.24em] text-primary/90 backdrop-blur-md">
-                <AgentAlphaIcon className="h-[1.55rem] w-[1.55rem]" />
-                Speak to Alpha
-              </span>
-            </div>
-            <div className="space-y-3">
-              <CardTitle className="text-[2rem] font-semibold tracking-tight sm:text-[2.25rem]">
+          <div className="space-y-2 text-center">
+            <div className="space-y-1.5">
+              <CardTitle className="text-[1.7rem] font-medium tracking-tight text-[#161616] sm:text-[1.9rem]">
                 Ask Alpha
               </CardTitle>
-              <p className="mx-auto max-w-2xl text-sm leading-7 text-muted-foreground sm:text-[15px]">
-                Ask about any stock, market trend, or economic signal. When the
-                conversation becomes specific, you can jump into the stock
-                dashboard.
+              <p className="mx-auto max-w-[48rem] text-sm leading-6 font-light text-black/68 sm:text-[15px]">
+                Ask about stocks, macro trends, or economic signals, then open a stock dashboard when you need to go deeper.
               </p>
             </div>
           </div>
@@ -261,38 +272,41 @@ export default function AgentChat({
       <CardContent
         className={cn(
           "flex min-h-0 flex-1 flex-col",
-          isLanding ? "gap-5 px-5 pb-5 text-left sm:px-6 sm:pb-6" : "gap-3",
+          isLanding ? "gap-3 px-5 pb-4 text-left sm:px-6 sm:pb-4" : "gap-3",
         )}
       >
         <div
           ref={scrollRef}
           className={cn(
-            "min-h-0 flex-1 overflow-y-auto",
             isLanding
-              ? "space-y-5 px-1 pb-1 pt-1 text-left"
+              ? landingCompactEmpty
+                ? "space-y-3 px-1 pb-0 pt-0 text-left"
+                : "min-h-0 flex-1 overflow-y-auto space-y-4 px-1 pb-1 pt-0 text-left"
               : "space-y-4 rounded-lg bg-background/40 p-4",
           )}
         >
           {showSuggestions && (
             <div
               className={cn(
-                "space-y-4",
+                "space-y-3",
                 isLanding &&
-                  "mx-auto flex max-w-3xl flex-col items-center pt-4 text-center sm:pt-6",
+                  "mx-auto flex max-w-3xl flex-col items-center pt-0 text-center",
               )}
             >
-              <div className="space-y-4">
-                <p
-                  className={cn(
-                    "text-muted-foreground",
-                    isLanding
-                      ? "mx-auto max-w-2xl text-[15px] leading-7"
-                      : "text-sm",
-                  )}
-                >
-                  {introText}
-                </p>
-              </div>
+              {showLandingIntro && (
+                <div className="space-y-3">
+                  <p
+                    className={cn(
+                      "text-muted-foreground",
+                      isLanding
+                        ? "mx-auto max-w-2xl text-[15px] leading-7 font-light text-black/66"
+                        : "text-sm",
+                    )}
+                  >
+                    {introText}
+                  </p>
+                </div>
+              )}
               <div
                 className={cn(
                   "flex flex-wrap gap-2.5",
@@ -306,7 +320,7 @@ export default function AgentChat({
                     className={cn(
                       "rounded-full border transition-colors",
                       isLanding
-                        ? "border-white/10 bg-white/[0.045] px-4 py-2.5 text-xs font-medium text-foreground/85 backdrop-blur-sm hover:border-primary/40 hover:bg-primary/10 hover:text-foreground"
+                        ? "border-black/[0.08] bg-[#f4f8ff] px-4 py-2 text-xs font-normal text-black/74 hover:bg-[#e9f3ff] hover:text-[#161616]"
                         : "border-border/50 bg-card/60 px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground",
                     )}
                   >
@@ -336,7 +350,7 @@ export default function AgentChat({
           className={cn(
             "shrink-0",
             isLanding
-              ? "flex flex-col gap-3 border-t border-white/[0.08] pt-4 sm:flex-row"
+              ? "flex flex-col gap-3 border-t border-black/[0.08] pt-2.5 sm:flex-row"
               : "flex gap-2",
           )}
         >
@@ -349,9 +363,9 @@ export default function AgentChat({
               placeholder={placeholderText}
               disabled={streaming}
               className={cn(
-                "w-full border text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-primary/50 disabled:opacity-50",
+                "w-full border outline-none transition-colors placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-primary/50 disabled:opacity-50",
                 isLanding
-                  ? "h-[3.4rem] rounded-[1.7rem] border-white/10 bg-white/[0.035] px-5 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-sm"
+                  ? "h-[3.35rem] rounded-2xl border-black/[0.08] bg-[#f4f8ff] px-5 text-sm text-[#161616] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
                   : "h-10 rounded-lg border-border/50 bg-background/60 px-4 text-sm",
               )}
             />
@@ -376,7 +390,7 @@ export default function AgentChat({
               className={cn(
                 "inline-flex shrink-0 items-center justify-center gap-1.5 font-medium transition-colors",
                 isLanding
-                  ? "h-[3.4rem] rounded-[1.7rem] bg-primary px-5 text-sm text-primary-foreground shadow-[0_18px_36px_-18px_rgba(83,74,183,0.88)] hover:bg-primary/90"
+                  ? "h-[3.35rem] rounded-2xl bg-[#1080ff] px-5 text-sm text-white shadow-none hover:bg-[#006fe6]"
                   : "h-10 rounded-lg bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90",
                 !input.trim() && "pointer-events-none opacity-50",
               )}
@@ -470,9 +484,9 @@ function MessageBubble({
         <div
           className={cn(
             "max-w-[80%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm text-foreground",
-            variant === "landing"
-              ? "bg-primary/18 shadow-[0_20px_34px_-24px_rgba(83,74,183,0.9)]"
-              : "bg-primary/15",
+              variant === "landing"
+                ? "border border-black/[0.08] bg-[#1080ff] text-white shadow-none"
+                : "bg-primary/15",
           )}
         >
           {message.content}
@@ -503,7 +517,7 @@ function MessageBubble({
       {toolEntries.length > 0 && (
         <div className="space-y-1">
           {toolEntries.map((entry, i) => (
-            <ToolBadge key={i} entry={entry} />
+            <ToolBadge key={i} entry={entry} variant={variant} />
           ))}
         </div>
       )}
@@ -511,25 +525,44 @@ function MessageBubble({
       {suggestedTicker && (
         <DashboardSuggestionCard
           symbol={suggestedTicker}
+          variant={variant}
           onOpen={() => onOpenTicker(suggestedTicker)}
         />
       )}
 
       {displayMetrics.map((entry, i) => (
-        <MetricDisplay key={`metric-${i}`} metrics={entry.metrics} />
+        <MetricDisplay key={`metric-${i}`} metrics={entry.metrics} variant={variant} />
       ))}
 
       {displayCharts.map((entry, i) => (
-        <ChartDisplay key={`chart-${i}`} entry={entry} />
+        <ChartDisplay key={`chart-${i}`} entry={entry} variant={variant} />
       ))}
 
       {message.content && (
         <div className="flex gap-2.5">
-          <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15">
-            <AgentAlphaIcon className="h-[1.45rem] w-[1.45rem]" />
+          <div
+            className={cn(
+              "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
+              variant === "landing"
+                ? "border border-black/[0.08] bg-[#f4f8ff]"
+                : "bg-primary/15",
+            )}
+          >
+            <AgentAlphaIcon
+              tone={variant === "landing" ? "light" : "default"}
+              className="h-[1.45rem] w-[1.45rem]"
+            />
           </div>
-          <div className="min-w-0 flex-1 text-sm text-foreground/90">
-            <MarkdownMessage content={message.content} />
+          <div
+            className={cn(
+              "min-w-0 flex-1 text-sm",
+              variant === "landing" ? "text-[#161616]" : "text-foreground/90",
+            )}
+          >
+            <MarkdownMessage
+              content={message.content}
+              tone={variant === "landing" ? "light" : "default"}
+            />
           </div>
         </div>
       )}
@@ -554,19 +587,33 @@ function MessageBubble({
 function DashboardSuggestionCard({
   symbol,
   onOpen,
+  variant,
 }: {
   symbol: string;
   onOpen: () => void;
+  variant: "dashboard" | "landing";
 }) {
   return (
-    <div className="rounded-2xl border border-primary/20 bg-primary/10 p-3 text-left shadow-[0_24px_40px_-28px_rgba(83,74,183,0.9)]">
+    <div
+      className={cn(
+        "rounded-2xl p-3 text-left",
+        variant === "landing"
+          ? "border border-black/[0.08] bg-[#f4f8ff]"
+          : "border border-white/[0.08] bg-white/[0.03]",
+      )}
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <p className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-primary/90">
+          <p
+            className={cn(
+              "inline-flex items-center gap-2 text-[11px] font-normal uppercase tracking-[0.2em]",
+              variant === "landing" ? "text-black/54" : "text-white/52",
+            )}
+          >
             <LayoutDashboard className="h-3.5 w-3.5" />
             Stock Workspace Ready
           </p>
-          <p className="text-sm text-foreground">
+          <p className={cn("text-sm", variant === "landing" ? "text-black/76" : "text-white/78")}>
             Open the <span className="font-mono font-semibold">{symbol}</span>{" "}
             dashboard for charts, fundamentals, filings, and a dedicated stock
             agent.
@@ -575,7 +622,12 @@ function DashboardSuggestionCard({
         <button
           type="button"
           onClick={onOpen}
-          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-primary/30 bg-primary/15 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+          className={cn(
+            "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors",
+            variant === "landing"
+              ? "border border-black/[0.08] bg-[#1080ff] text-white hover:bg-[#006fe6]"
+              : "border border-white/[0.1] bg-white text-black hover:bg-white/92",
+          )}
         >
           Open {symbol}
           <ArrowUpRight className="h-4 w-4" />
@@ -585,19 +637,42 @@ function DashboardSuggestionCard({
   );
 }
 
-function ToolBadge({ entry }: { entry: ToolCallEntry | ToolResultEntry }) {
+function ToolBadge({
+  entry,
+  variant,
+}: {
+  entry: ToolCallEntry | ToolResultEntry;
+  variant: "dashboard" | "landing";
+}) {
   if (entry.type === "tool_call") {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <div
+        className={cn(
+          "flex items-center gap-1.5 text-xs",
+          variant === "landing" ? "text-black/54" : "text-muted-foreground",
+        )}
+      >
         <Wrench className="h-3 w-3" />
         <span>
           Calling{" "}
-          <span className="font-mono font-medium text-foreground/70">
+          <span
+            className={cn(
+              "font-mono font-medium",
+              variant === "landing" ? "text-black/70" : "text-foreground/70",
+            )}
+          >
             {entry.name}
           </span>
         </span>
         {Object.keys(entry.arguments).length > 0 && (
-          <span className="font-mono text-muted-foreground/60">
+          <span
+            className={cn(
+              "font-mono",
+              variant === "landing"
+                ? "text-black/46"
+                : "text-muted-foreground/60",
+            )}
+          >
             (
             {Object.entries(entry.arguments)
               .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
@@ -625,17 +700,40 @@ function ToolBadge({ entry }: { entry: ToolCallEntry | ToolResultEntry }) {
 
 function MetricDisplay({
   metrics,
+  variant,
 }: {
   metrics: { label: string; value: string }[];
+  variant: "dashboard" | "landing";
 }) {
   return (
-    <div className="grid grid-cols-2 gap-2 rounded-lg border border-border/40 bg-background/60 p-3 text-left">
+    <div
+      className={cn(
+        "grid grid-cols-2 gap-2 rounded-lg p-3 text-left",
+        variant === "landing"
+          ? "border border-black/[0.08] bg-[#f4f8ff]"
+          : "border border-border/40 bg-background/60",
+      )}
+    >
       {metrics.map((m) => (
         <div key={m.label}>
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <p
+            className={cn(
+              "text-[10px] uppercase tracking-wider",
+              variant === "landing"
+                ? "font-normal text-black/52"
+                : "font-medium text-muted-foreground",
+            )}
+          >
             {m.label}
           </p>
-          <p className="font-mono text-sm font-semibold text-foreground">
+          <p
+            className={cn(
+              "font-mono text-sm",
+              variant === "landing"
+                ? "font-medium text-[#161616]"
+                : "font-semibold text-foreground",
+            )}
+          >
             {m.value}
           </p>
         </div>
@@ -644,7 +742,13 @@ function MetricDisplay({
   );
 }
 
-function ChartDisplay({ entry }: { entry: DisplayChartEntry }) {
+function ChartDisplay({
+  entry,
+  variant,
+}: {
+  entry: DisplayChartEntry;
+  variant: "dashboard" | "landing";
+}) {
   if (entry.points.length === 0) return null;
 
   const closes = entry.points.map((p) => p.close);
@@ -662,11 +766,32 @@ function ChartDisplay({ entry }: { entry: DisplayChartEntry }) {
   const positive = closes[closes.length - 1] >= closes[0];
 
   return (
-    <div className="rounded-lg border border-border/40 bg-background/60 p-3 text-left">
+    <div
+      className={cn(
+        "rounded-lg p-3 text-left",
+        variant === "landing"
+          ? "border border-black/[0.08] bg-[#f4f8ff]"
+          : "border border-border/40 bg-background/60",
+      )}
+    >
       <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-xs font-medium text-foreground">
+        <span
+          className={cn(
+            "text-xs",
+            variant === "landing"
+              ? "font-medium text-[#161616]"
+              : "font-medium text-foreground",
+          )}
+        >
           {entry.symbol}
-          <span className="ml-1.5 text-muted-foreground">{entry.period}</span>
+          <span
+            className={cn(
+              "ml-1.5",
+              variant === "landing" ? "text-black/54" : "text-muted-foreground",
+            )}
+          >
+            {entry.period}
+          </span>
         </span>
         <span
           className={`text-xs font-mono font-semibold ${
