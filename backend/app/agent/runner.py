@@ -17,6 +17,7 @@ from app.agent.prompts import SYSTEM_PROMPT
 from app.agent.tools import TOOL_DEFINITIONS
 from app.agent.tools import dispatch_tool_with_display
 from app.config import settings
+from app.models.macro import MacroCountry
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +37,24 @@ def _sse(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
-def _build_user_content(query: str, ticker: str | None) -> str:
+def _build_user_content(
+    query: str,
+    ticker: str | None,
+    dashboard_context: str | None,
+    country: MacroCountry | None,
+) -> str:
     if ticker:
         return f"{query}\n\n[Context: the user is asking about ticker {ticker.upper()}]"
+
+    if dashboard_context == "macro":
+        country_label = "France" if country == MacroCountry.FR else "the United States"
+        return (
+            f"{query}\n\n"
+            "[Context: the user is on the macro dashboard"
+            f" for {country_label}. Use get_macro_snapshot with country="
+            f"'{country.value if country else MacroCountry.US.value}' and keep the answer "
+            "grounded in that country unless the user asks to compare or switch countries.]"
+        )
     return query
 
 
@@ -153,6 +169,8 @@ async def _stream_final_answer(
 async def run_agent(
     query: str,
     ticker: str | None = None,
+    dashboard_context: str | None = None,
+    country: MacroCountry | None = None,
 ) -> AsyncGenerator[str, None]:
     """Execute the Mistral tool-use loop and yield SSE events.
 
@@ -173,7 +191,9 @@ async def run_agent(
 
     messages: Messages = [
         SystemMessage(content=SYSTEM_PROMPT),
-        UserMessage(content=_build_user_content(query, ticker)),
+        UserMessage(
+            content=_build_user_content(query, ticker, dashboard_context, country)
+        ),
     ]
 
     any_tool_called = False

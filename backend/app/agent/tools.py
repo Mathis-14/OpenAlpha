@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Any
 
+from app.models.macro import MacroCountry
 from app.services import edgar_service
 from app.services import fred_service
 from app.services import news_service
@@ -92,11 +93,17 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "description": (
                 "Get key macroeconomic indicators: Fed Funds rate, CPI, "
                 "real GDP growth, 10-year Treasury yield, unemployment rate. "
-                "No parameters needed."
+                "Use country='fr' for France, otherwise default to the U.S."
             ),
             "parameters": {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "country": {
+                        "type": "string",
+                        "enum": ["us", "fr"],
+                        "description": "Macro dashboard country context (default: us)",
+                    },
+                },
             },
         },
     },
@@ -198,6 +205,51 @@ async def dispatch_tool_with_display(
     return json.dumps(result, default=str), displays
 
 
+async def _execute_macro_snapshot_tool(
+    arguments: dict[str, Any],
+) -> tuple[dict[str, Any], list[DisplayEvent]]:
+    requested_country = arguments.get("country", MacroCountry.US.value)
+    try:
+        country = MacroCountry(str(requested_country))
+    except ValueError:
+        country = MacroCountry.US
+
+    snapshot = await fred_service.get_macro_snapshot_for_country(country)
+    result = snapshot.model_dump()
+    displays: list[DisplayEvent] = [
+        {
+            "type": "display_metric",
+            "data": {
+                "metrics": [
+                    {
+                        "label": "Fed Funds",
+                        "value": _format_indicator_value(
+                            snapshot.fed_funds_rate, decimals=2
+                        ),
+                    },
+                    {
+                        "label": "CPI",
+                        "value": _format_indicator_value(snapshot.cpi, decimals=1),
+                    },
+                    {
+                        "label": "GDP Growth",
+                        "value": _format_indicator_value(
+                            snapshot.gdp_growth, decimals=1
+                        ),
+                    },
+                    {
+                        "label": "Unemployment",
+                        "value": _format_indicator_value(
+                            snapshot.unemployment, decimals=1
+                        ),
+                    },
+                ],
+            },
+        }
+    ]
+    return result, displays
+
+
 async def _execute_tool(
     name: str, arguments: dict[str, Any]
 ) -> tuple[dict[str, Any], list[DisplayEvent]]:
@@ -275,39 +327,7 @@ async def _execute_tool(
         )
 
     elif name == "get_macro_snapshot":
-        snapshot = await fred_service.get_macro_snapshot()
-        result = snapshot.model_dump()
-        displays.append(
-            {
-                "type": "display_metric",
-                "data": {
-                    "metrics": [
-                        {
-                            "label": "Fed Funds",
-                            "value": _format_indicator_value(
-                                snapshot.fed_funds_rate, decimals=2
-                            ),
-                        },
-                        {
-                            "label": "CPI",
-                            "value": _format_indicator_value(snapshot.cpi, decimals=1),
-                        },
-                        {
-                            "label": "GDP Growth",
-                            "value": _format_indicator_value(
-                                snapshot.gdp_growth, decimals=1
-                            ),
-                        },
-                        {
-                            "label": "Unemployment",
-                            "value": _format_indicator_value(
-                                snapshot.unemployment, decimals=1
-                            ),
-                        },
-                    ],
-                },
-            }
-        )
+        result, displays = await _execute_macro_snapshot_tool(arguments)
 
     elif name == "get_sec_filings":
         filings = await edgar_service.get_filings(
