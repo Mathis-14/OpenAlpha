@@ -69,22 +69,22 @@ export default function PriceChart({
     const chart = createChart(el, {
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "rgba(255,255,255,0.5)",
+        textColor: "rgba(22,22,22,0.52)",
         fontSize: 12,
       },
       grid: {
-        vertLines: { color: "rgba(255,255,255,0.04)" },
-        horzLines: { color: "rgba(255,255,255,0.04)" },
+        vertLines: { color: "rgba(0,0,0,0.05)" },
+        horzLines: { color: "rgba(0,0,0,0.05)" },
       },
       crosshair: {
-        vertLine: { labelBackgroundColor: "#9B93F5" },
-        horzLine: { labelBackgroundColor: "#9B93F5" },
+        vertLine: { labelBackgroundColor: "#1080ff" },
+        horzLine: { labelBackgroundColor: "#1080ff" },
       },
       timeScale: {
-        borderColor: "rgba(255,255,255,0.06)",
+        borderColor: "rgba(0,0,0,0.08)",
         timeVisible: period === "1d" || period === "5d",
       },
-      rightPriceScale: { borderColor: "rgba(255,255,255,0.06)" },
+      rightPriceScale: { borderColor: "rgba(0,0,0,0.08)" },
       width: el.clientWidth,
       height: 400,
     });
@@ -126,19 +126,19 @@ export default function PriceChart({
   }, [data, period]);
 
   return (
-    <Card className="border-border/40 bg-card/60">
+    <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Price</CardTitle>
+          <CardTitle className="text-[#161616]">Price</CardTitle>
           <div className="flex gap-1">
             {PERIODS.map((p) => (
               <button
                 key={p.value}
                 onClick={() => handlePeriodChange(p.value)}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                   period === p.value
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "bg-[#1080ff] text-white"
+                    : "text-black/54 hover:bg-[#f4f8ff] hover:text-[#161616]"
                 }`}
               >
                 {p.label}
@@ -150,8 +150,8 @@ export default function PriceChart({
       <CardContent>
         <div className="relative">
           {loading && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center bg-card/80 backdrop-blur-sm">
-              <span className="text-sm text-muted-foreground">Loading...</span>
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[14px] bg-white/85 backdrop-blur-sm">
+              <span className="text-sm text-black/56">Loading...</span>
             </div>
           )}
           <div ref={containerRef} className="h-[400px] w-full" />

@@ -10,7 +10,7 @@ interface TickerSearchProps {
   className?: string;
   autoFocus?: boolean;
   size?: "default" | "lg";
-  variant?: "default" | "hero";
+  variant?: "default" | "hero" | "dashboard";
 }
 
 const MAX_RESULTS = 8;
@@ -43,6 +43,7 @@ export default function TickerSearch({
 
   const isLarge = size === "lg";
   const isHero = variant === "hero";
+  const isDashboard = variant === "dashboard";
 
   const navigate = useCallback(
     (ticker: string) => {
@@ -146,7 +147,7 @@ export default function TickerSearch({
   return (
     <div
       ref={containerRef}
-      className={`relative ${isHero ? "z-20" : ""} ${className}`}
+      className={`relative ${isHero || isDashboard ? "z-20" : ""} ${className}`}
     >
       <div
         className={isHero ? "flex items-center gap-3" : "flex items-center gap-2"}
@@ -154,8 +155,8 @@ export default function TickerSearch({
         <div className="relative flex-1">
           <Search
             className={`pointer-events-none absolute top-1/2 -translate-y-1/2 ${
-              isHero ? "text-black/34" : "text-muted-foreground"
-            } ${isHero ? "left-4 h-5 w-5" : isLarge ? "left-3 h-5 w-5" : "left-3 h-4 w-4"}`}
+              isHero || isDashboard ? "text-black/34" : "text-muted-foreground"
+            } ${isHero ? "left-4 h-5 w-5" : isDashboard ? "left-3.5 h-4.5 w-4.5" : isLarge ? "left-3 h-5 w-5" : "left-3 h-4 w-4"}`}
           />
           <input
             ref={inputRef}
@@ -176,7 +177,9 @@ export default function TickerSearch({
             aria-controls="ticker-listbox"
             className={`w-full transition-colors outline-none placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-primary/50 ${
               isHero
-                ? "h-[3.65rem] rounded-2xl border border-black/[0.08] bg-[#f4f8ff] pl-12 pr-5 text-base text-[#161616] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+                ? "h-10 rounded-[10px] border border-black/[0.08] bg-[#f4f8ff] pl-12 pr-5 text-sm text-[#161616] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+                : isDashboard
+                  ? "h-10 rounded-[10px] border border-black/[0.08] bg-[#f4f8ff] pl-11 pr-4 text-sm text-[#161616] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]"
                 : isLarge
                   ? "h-14 rounded-lg border border-border/50 bg-card/60 pl-11 pr-4 text-lg text-foreground backdrop-blur-sm"
                   : "h-10 rounded-lg border border-border/50 bg-card/60 pl-9 pr-4 text-sm text-foreground backdrop-blur-sm"
@@ -189,7 +192,9 @@ export default function TickerSearch({
           aria-disabled={!value.trim() || undefined}
           className={`inline-flex shrink-0 items-center justify-center font-medium transition-colors ${
             isHero
-              ? "h-[3.65rem] rounded-2xl bg-[#1080ff] px-6 text-sm text-white shadow-none hover:bg-[#006fe6]"
+              ? "h-10 rounded-[10px] bg-[#1080ff] px-5 text-sm text-white shadow-none hover:bg-[#006fe6]"
+              : isDashboard
+                ? "h-10 rounded-[10px] bg-[#1080ff] px-4 text-sm text-white hover:bg-[#006fe6]"
               : isLarge
                 ? "h-14 rounded-lg bg-primary px-8 text-lg text-primary-foreground hover:bg-primary/90"
                 : "h-10 rounded-lg bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90"
@@ -205,7 +210,9 @@ export default function TickerSearch({
           role="listbox"
           className={`overflow-hidden border shadow-lg ${
             isHero
-              ? "relative mt-3 max-h-[22rem] rounded-[1.35rem] border-black/[0.08] bg-white"
+              ? "relative mt-3 max-h-[22rem] rounded-[14px] border-black/[0.08] bg-white"
+              : isDashboard
+                ? "absolute top-full left-0 z-50 mt-2 w-full rounded-[14px] border-black/[0.08] bg-white"
               : "absolute top-full left-0 z-50 mt-1 w-full rounded-lg border-border/50 bg-popover backdrop-blur-sm"
           }`}
         >
@@ -220,20 +227,22 @@ export default function TickerSearch({
               }}
               onMouseEnter={() => setSelected(i)}
               className={`flex cursor-pointer items-center gap-3 text-sm transition-colors ${
-                isHero ? "px-4 py-3" : "px-3 py-2.5"
+                isHero ? "px-4 py-3" : isDashboard ? "px-3.5 py-3" : "px-3 py-2.5"
               } ${
                 i === selected
                   ? isHero
                     ? "bg-[#eef5ff] text-[#161616]"
+                    : isDashboard
+                      ? "bg-[#eef5ff] text-[#161616]"
                     : "bg-muted text-foreground"
-                  : isHero
+                  : isHero || isDashboard
                     ? "text-black/58 hover:bg-[#f6f9ff]"
                     : "text-muted-foreground hover:bg-muted/50"
               }`}
             >
               <TrendingUp
                 className={`h-4 w-4 shrink-0 ${
-                  isHero ? "text-black/30" : "text-primary/60"
+                  isHero || isDashboard ? "text-black/30" : "text-primary/60"
                 }`}
               />
               <span className="font-mono font-semibold text-foreground">

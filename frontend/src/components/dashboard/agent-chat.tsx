@@ -236,12 +236,12 @@ export default function AgentChat({
         "flex flex-col overflow-hidden border backdrop-blur-xl",
         isLanding
           ? cn(
-              "rounded-[1.75rem] border-black/[0.08] bg-white shadow-[0_34px_70px_-40px_rgba(0,0,0,0.12)]",
+              "rounded-[16px] border-black/[0.08] bg-white shadow-[0_34px_70px_-40px_rgba(0,0,0,0.12)]",
               landingCompactEmpty
                 ? "min-h-[300px] sm:min-h-[320px]"
                 : "h-[420px] sm:h-[460px]",
             )
-          : "h-full border-border/40 bg-card/60",
+          : "h-full rounded-[16px] border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]",
       )}
     >
       <CardHeader
@@ -262,10 +262,15 @@ export default function AgentChat({
             </div>
           </div>
         ) : (
-          <CardTitle className="flex items-center gap-2">
-            <AgentAlphaIcon className="h-[1.75rem] w-[1.75rem]" />
-            AI Agent
-          </CardTitle>
+          <div className="space-y-1.5">
+            <CardTitle className="flex items-center gap-2 text-[#161616]">
+              <AgentAlphaIcon tone="light" className="h-[1.75rem] w-[1.75rem]" />
+              Alpha
+            </CardTitle>
+            <p className="text-sm font-light text-black/62">
+              Ask about {ticker}. Alpha will pull live data before answering.
+            </p>
+          </div>
         )}
       </CardHeader>
 
@@ -282,7 +287,7 @@ export default function AgentChat({
               ? landingCompactEmpty
                 ? "space-y-3 px-1 pb-0 pt-0 text-left"
                 : "min-h-0 flex-1 overflow-y-auto space-y-4 px-1 pb-1 pt-0 text-left"
-              : "space-y-4 rounded-lg bg-background/40 p-4",
+              : "space-y-4 rounded-[14px] border border-black/[0.08] bg-[#f8fbff] p-4",
           )}
         >
           {showSuggestions && (
@@ -321,7 +326,7 @@ export default function AgentChat({
                       "rounded-full border transition-colors",
                       isLanding
                         ? "border-black/[0.08] bg-[#f4f8ff] px-4 py-2 text-xs font-normal text-black/74 hover:bg-[#e9f3ff] hover:text-[#161616]"
-                        : "border-border/50 bg-card/60 px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        : "border-black/[0.08] bg-white px-3 py-1.5 text-xs text-black/62 hover:bg-[#f4f8ff] hover:text-[#161616]",
                     )}
                   >
                     {s}
@@ -351,7 +356,7 @@ export default function AgentChat({
             "shrink-0",
             isLanding
               ? "flex flex-col gap-3 border-t border-black/[0.08] pt-2.5 sm:flex-row"
-              : "flex gap-2",
+              : "flex gap-2 border-t border-black/[0.08] pt-3",
           )}
         >
           <div className="relative flex-1">
@@ -365,8 +370,8 @@ export default function AgentChat({
               className={cn(
                 "w-full border outline-none transition-colors placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-primary/50 disabled:opacity-50",
                 isLanding
-                  ? "h-[3.35rem] rounded-2xl border-black/[0.08] bg-[#f4f8ff] px-5 text-sm text-[#161616] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
-                  : "h-10 rounded-lg border-border/50 bg-background/60 px-4 text-sm",
+                  ? "h-10 rounded-[10px] border-black/[0.08] bg-[#f4f8ff] px-4 text-sm text-[#161616] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+                  : "h-10 rounded-[10px] border-black/[0.08] bg-[#f4f8ff] px-4 text-sm text-[#161616] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]",
               )}
             />
           </div>
@@ -377,8 +382,8 @@ export default function AgentChat({
               className={cn(
                 "inline-flex shrink-0 items-center justify-center gap-1.5 font-medium transition-colors",
                 isLanding
-                  ? "h-[3.4rem] rounded-[1.7rem] bg-destructive/10 px-5 text-sm text-destructive hover:bg-destructive/20"
-                  : "h-10 rounded-lg bg-destructive/10 px-4 text-sm text-destructive hover:bg-destructive/20",
+                  ? "h-10 rounded-[10px] bg-destructive/10 px-4 text-sm text-destructive hover:bg-destructive/20"
+                  : "h-10 rounded-[10px] bg-destructive/10 px-4 text-sm text-destructive hover:bg-destructive/20",
               )}
             >
               Stop
@@ -390,8 +395,8 @@ export default function AgentChat({
               className={cn(
                 "inline-flex shrink-0 items-center justify-center gap-1.5 font-medium transition-colors",
                 isLanding
-                  ? "h-[3.35rem] rounded-2xl bg-[#1080ff] px-5 text-sm text-white shadow-none hover:bg-[#006fe6]"
-                  : "h-10 rounded-lg bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90",
+                  ? "h-10 rounded-[10px] bg-[#1080ff] px-4 text-sm text-white shadow-none hover:bg-[#006fe6]"
+                  : "h-10 rounded-[10px] bg-[#1080ff] px-4 text-sm text-white hover:bg-[#006fe6]",
                 !input.trim() && "pointer-events-none opacity-50",
               )}
             >
@@ -483,8 +488,8 @@ function MessageBubble({
       <div className="flex justify-end">
         <div
           className={cn(
-            "max-w-[80%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm text-foreground",
-              variant === "landing"
+            "max-w-[80%] rounded-[14px] rounded-br-[8px] px-4 py-2.5 text-sm text-foreground",
+              variant === "landing" || variant === "dashboard"
                 ? "border border-black/[0.08] bg-[#1080ff] text-white shadow-none"
                 : "bg-primary/15",
           )}
@@ -543,25 +548,25 @@ function MessageBubble({
           <div
             className={cn(
               "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
-              variant === "landing"
+              variant === "landing" || variant === "dashboard"
                 ? "border border-black/[0.08] bg-[#f4f8ff]"
                 : "bg-primary/15",
             )}
           >
             <AgentAlphaIcon
-              tone={variant === "landing" ? "light" : "default"}
+              tone={variant === "landing" || variant === "dashboard" ? "light" : "default"}
               className="h-[1.45rem] w-[1.45rem]"
             />
           </div>
           <div
             className={cn(
               "min-w-0 flex-1 text-sm",
-              variant === "landing" ? "text-[#161616]" : "text-foreground/90",
+              variant === "landing" || variant === "dashboard" ? "text-[#161616]" : "text-foreground/90",
             )}
           >
             <MarkdownMessage
               content={message.content}
-              tone={variant === "landing" ? "light" : "default"}
+              tone={variant === "landing" || variant === "dashboard" ? "light" : "default"}
             />
           </div>
         </div>
@@ -596,8 +601,8 @@ function DashboardSuggestionCard({
   return (
     <div
       className={cn(
-        "rounded-2xl p-3 text-left",
-        variant === "landing"
+        "rounded-[14px] p-3 text-left",
+        variant === "landing" || variant === "dashboard"
           ? "border border-black/[0.08] bg-[#f4f8ff]"
           : "border border-white/[0.08] bg-white/[0.03]",
       )}
@@ -607,13 +612,13 @@ function DashboardSuggestionCard({
           <p
             className={cn(
               "inline-flex items-center gap-2 text-[11px] font-normal uppercase tracking-[0.2em]",
-              variant === "landing" ? "text-black/54" : "text-white/52",
+              variant === "landing" || variant === "dashboard" ? "text-black/54" : "text-white/52",
             )}
           >
             <LayoutDashboard className="h-3.5 w-3.5" />
             Stock Workspace Ready
           </p>
-          <p className={cn("text-sm", variant === "landing" ? "text-black/76" : "text-white/78")}>
+          <p className={cn("text-sm", variant === "landing" || variant === "dashboard" ? "text-black/76" : "text-white/78")}>
             Open the <span className="font-mono font-semibold">{symbol}</span>{" "}
             dashboard for charts, fundamentals, filings, and a dedicated stock
             agent.
@@ -623,8 +628,8 @@ function DashboardSuggestionCard({
           type="button"
           onClick={onOpen}
           className={cn(
-            "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors",
-            variant === "landing"
+            "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[10px] px-4 text-sm font-medium transition-colors",
+            variant === "landing" || variant === "dashboard"
               ? "border border-black/[0.08] bg-[#1080ff] text-white hover:bg-[#006fe6]"
               : "border border-white/[0.1] bg-white text-black hover:bg-white/92",
           )}
@@ -649,7 +654,7 @@ function ToolBadge({
       <div
         className={cn(
           "flex items-center gap-1.5 text-xs",
-          variant === "landing" ? "text-black/54" : "text-muted-foreground",
+          variant === "landing" || variant === "dashboard" ? "text-black/54" : "text-muted-foreground",
         )}
       >
         <Wrench className="h-3 w-3" />
@@ -658,7 +663,7 @@ function ToolBadge({
           <span
             className={cn(
               "font-mono font-medium",
-              variant === "landing" ? "text-black/70" : "text-foreground/70",
+              variant === "landing" || variant === "dashboard" ? "text-black/70" : "text-foreground/70",
             )}
           >
             {entry.name}
@@ -668,7 +673,7 @@ function ToolBadge({
           <span
             className={cn(
               "font-mono",
-              variant === "landing"
+              variant === "landing" || variant === "dashboard"
                 ? "text-black/46"
                 : "text-muted-foreground/60",
             )}
@@ -708,8 +713,8 @@ function MetricDisplay({
   return (
     <div
       className={cn(
-        "grid grid-cols-2 gap-2 rounded-lg p-3 text-left",
-        variant === "landing"
+        "grid grid-cols-2 gap-2 rounded-[14px] p-3 text-left",
+        variant === "landing" || variant === "dashboard"
           ? "border border-black/[0.08] bg-[#f4f8ff]"
           : "border border-border/40 bg-background/60",
       )}
@@ -719,7 +724,7 @@ function MetricDisplay({
           <p
             className={cn(
               "text-[10px] uppercase tracking-wider",
-              variant === "landing"
+              variant === "landing" || variant === "dashboard"
                 ? "font-normal text-black/52"
                 : "font-medium text-muted-foreground",
             )}
@@ -729,7 +734,7 @@ function MetricDisplay({
           <p
             className={cn(
               "font-mono text-sm",
-              variant === "landing"
+              variant === "landing" || variant === "dashboard"
                 ? "font-medium text-[#161616]"
                 : "font-semibold text-foreground",
             )}
@@ -768,8 +773,8 @@ function ChartDisplay({
   return (
     <div
       className={cn(
-        "rounded-lg p-3 text-left",
-        variant === "landing"
+        "rounded-[14px] p-3 text-left",
+        variant === "landing" || variant === "dashboard"
           ? "border border-black/[0.08] bg-[#f4f8ff]"
           : "border border-border/40 bg-background/60",
       )}
@@ -778,7 +783,7 @@ function ChartDisplay({
         <span
           className={cn(
             "text-xs",
-            variant === "landing"
+            variant === "landing" || variant === "dashboard"
               ? "font-medium text-[#161616]"
               : "font-medium text-foreground",
           )}
@@ -787,7 +792,7 @@ function ChartDisplay({
           <span
             className={cn(
               "ml-1.5",
-              variant === "landing" ? "text-black/54" : "text-muted-foreground",
+              variant === "landing" || variant === "dashboard" ? "text-black/54" : "text-muted-foreground",
             )}
           >
             {entry.period}

@@ -13,21 +13,21 @@ import { ChevronRight, ExternalLink, FileText } from "lucide-react";
 export default function FilingsPanel({ filings }: { filings: Filing[] }) {
   if (filings.length === 0) {
     return (
-      <Card className="border-border/40 bg-card/60">
+      <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
         <CardHeader>
-          <CardTitle>SEC Filings</CardTitle>
+          <CardTitle className="text-[#161616]">SEC Filings</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No filings available.</p>
+          <p className="text-sm font-light text-black/64">No filings available.</p>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="border-border/40 bg-card/60">
+    <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
       <CardHeader>
-        <CardTitle>SEC Filings</CardTitle>
+        <CardTitle className="text-[#161616]">SEC Filings</CardTitle>
       </CardHeader>
       <CardContent>
         <ScrollArea className="h-[400px]">
@@ -44,13 +44,13 @@ export default function FilingsPanel({ filings }: { filings: Filing[] }) {
 
 function FilingItem({ filing }: { filing: Filing }) {
   return (
-    <Collapsible className="rounded-lg border border-border/40 bg-background/40">
-      <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-muted/40 [&[data-panel-open]>svg:first-child]:rotate-90">
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform" />
-        <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+    <Collapsible className="rounded-[14px] border border-black/[0.08] bg-[#fbfcff]">
+      <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-[#f4f8ff] [&[data-panel-open]>svg:first-child]:rotate-90">
+        <ChevronRight className="h-4 w-4 shrink-0 text-black/44 transition-transform" />
+        <FileText className="h-4 w-4 shrink-0 text-black/44" />
         <div className="min-w-0 flex-1">
-          <span className="font-medium">{filing.form_type}</span>
-          <span className="ml-2 text-muted-foreground">
+          <span className="font-medium text-[#161616]">{filing.form_type}</span>
+          <span className="ml-2 text-black/52">
             {new Date(filing.filing_date).toLocaleDateString("en-US", {
               year: "numeric",
               month: "short",
@@ -63,26 +63,26 @@ function FilingItem({ filing }: { filing: Filing }) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="shrink-0 text-muted-foreground/40 hover:text-primary transition-colors"
+          className="shrink-0 text-black/32 transition-colors hover:text-[#1080ff]"
         >
           <ExternalLink className="h-3.5 w-3.5" />
         </a>
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden">
-        <div className="space-y-3 border-t border-border/40 px-4 py-3">
+        <div className="space-y-3 border-t border-black/[0.08] px-4 py-3">
           {filing.sections.length > 0 ? (
             filing.sections.map((section, i) => (
               <div key={i}>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <h4 className="text-xs font-medium uppercase tracking-wider text-black/48">
                   {section.title}
                 </h4>
-                <p className="mt-1 text-sm leading-relaxed text-foreground/80 line-clamp-6">
+                <p className="mt-1 line-clamp-6 text-sm leading-relaxed text-black/72">
                   {section.content}
                 </p>
               </div>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-black/62">
               No parsed sections available.
             </p>
           )}
