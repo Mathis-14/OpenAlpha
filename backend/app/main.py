@@ -22,6 +22,7 @@ from app.routers import filings
 from app.routers import macro
 from app.routers import market
 from app.routers import news
+from app.routers import search
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ app.include_router(macro.router)
 app.include_router(filings.router)
 app.include_router(news.router)
 app.include_router(agent.router)
+app.include_router(search.router)
 
 
 @app.exception_handler(UpstreamDataError)
