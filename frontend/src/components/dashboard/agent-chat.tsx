@@ -6,6 +6,7 @@ import AgentAlphaIcon from "@/components/agent-alpha-icon";
 import MarkdownMessage from "@/components/markdown-message";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { streamAgent, type AgentSSE } from "@/lib/api";
+import type { MacroCountry } from "@/types/api";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -71,6 +72,7 @@ interface AgentChatProps {
   ticker?: string;
   variant?: "dashboard" | "landing";
   autoFocusInput?: boolean;
+  macroCountry?: MacroCountry;
 }
 
 const TICKER_SUGGESTIONS = [
@@ -95,10 +97,24 @@ const LANDING_SUGGESTIONS = [
   "How is Bitcoin performing this week?",
 ];
 
+const MACRO_SUGGESTIONS: Record<MacroCountry, string[]> = {
+  us: [
+    "What changed in the latest U.S. inflation release?",
+    "How do rates and unemployment look right now?",
+    "Summarize the U.S. growth outlook from this dashboard.",
+  ],
+  fr: [
+    "What changed in the latest France inflation release?",
+    "How do French rates and unemployment look right now?",
+    "Summarize the France growth outlook from this dashboard.",
+  ],
+};
+
 export default function AgentChat({
   ticker,
   variant = "dashboard",
   autoFocusInput = false,
+  macroCountry,
 }: AgentChatProps) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -141,8 +157,12 @@ export default function AgentChat({
 
     try {
       for await (const sse of streamAgent(
-        query.trim(),
-        ticker,
+        {
+          query: query.trim(),
+          ticker,
+          dashboard_context: macroCountry ? "macro" : undefined,
+          country: macroCountry,
+        },
         controller.signal,
       )) {
         if (sse.event === "text_delta") {
@@ -209,14 +229,18 @@ export default function AgentChat({
 
   const suggestions = ticker
     ? TICKER_SUGGESTIONS
-    : isLanding
-      ? LANDING_SUGGESTIONS
-      : GENERAL_SUGGESTIONS;
+    : macroCountry
+      ? MACRO_SUGGESTIONS[macroCountry]
+      : isLanding
+        ? LANDING_SUGGESTIONS
+        : GENERAL_SUGGESTIONS;
   const showSuggestions = messages.length === 0 && !streaming;
 
   const placeholderText = ticker
     ? `Ask about ${ticker}...`
-    : "Ask about any stock or market...";
+    : macroCountry
+      ? `Ask about ${macroCountry === "fr" ? "France" : "U.S."} macro data...`
+      : "Ask about any stock or market...";
 
   const introText = ticker ? (
     <>
@@ -226,6 +250,10 @@ export default function AgentChat({
       </span>
       . The agent will fetch real data before answering.
     </>
+  ) : macroCountry ? (
+    `Ask about ${
+      macroCountry === "fr" ? "France" : "U.S."
+    } inflation, rates, growth, or labor data. Alpha will use the macro dashboard context before answering.`
   ) : (
     "Ask about any stock, market trends, or economic indicators. The agent will fetch real data before answering."
   );
@@ -346,6 +374,9 @@ export default function AgentChat({
               streaming={streaming && i === messages.length - 1}
               variant={variant}
               onOpenTicker={(symbol) => router.push(`/dashboard/${symbol}`)}
+              onOpenMacro={(country) =>
+                router.push(country === "fr" ? "/macro?country=fr" : "/macro")
+              }
             />
           ))}
         </div>
@@ -475,16 +506,47 @@ function getSuggestedTicker(entries: ChatEntry[]): string | null {
   return symbols.length === 1 ? symbols[0] : null;
 }
 
+function getSuggestedMacroCountry(entries: ChatEntry[]): MacroCountry | null {
+  const macroCalls = entries.filter(
+    (entry): entry is ToolCallEntry =>
+      entry.type === "tool_call" && entry.name === "get_macro_snapshot",
+  );
+
+  if (macroCalls.length === 0) {
+    return null;
+  }
+
+  const explicitCountries = Array.from(
+    new Set(
+      macroCalls.flatMap((entry) => {
+        const candidate = entry.arguments.country;
+        if (candidate === "fr" || candidate === "us") {
+          return [candidate];
+        }
+        return [];
+      }),
+    ),
+  );
+
+  if (explicitCountries.length > 1) {
+    return null;
+  }
+
+  return (explicitCountries[0] as MacroCountry | undefined) ?? "us";
+}
+
 function MessageBubble({
   message,
   streaming,
   variant,
   onOpenTicker,
+  onOpenMacro,
 }: {
   message: ChatMessage;
   streaming: boolean;
   variant: "dashboard" | "landing";
   onOpenTicker: (ticker: string) => void;
+  onOpenMacro: (country: MacroCountry) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -519,6 +581,10 @@ function MessageBubble({
   );
   const suggestedTicker =
     variant === "landing" ? getSuggestedTicker(entries) : null;
+  const suggestedMacroCountry =
+    variant === "landing" && !suggestedTicker
+      ? getSuggestedMacroCountry(entries)
+      : null;
 
   return (
     <div className="space-y-2.5 text-left">
@@ -535,6 +601,14 @@ function MessageBubble({
           symbol={suggestedTicker}
           variant={variant}
           onOpen={() => onOpenTicker(suggestedTicker)}
+        />
+      )}
+
+      {suggestedMacroCountry && (
+        <MacroDashboardSuggestionCard
+          country={suggestedMacroCountry}
+          variant={variant}
+          onOpen={() => onOpenMacro(suggestedMacroCountry)}
         />
       )}
 
@@ -639,6 +713,60 @@ function DashboardSuggestionCard({
           )}
         >
           Open {symbol}
+          <ArrowUpRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function MacroDashboardSuggestionCard({
+  country,
+  onOpen,
+  variant,
+}: {
+  country: MacroCountry;
+  onOpen: () => void;
+  variant: "dashboard" | "landing";
+}) {
+  const label = country === "fr" ? "France" : "U.S.";
+
+  return (
+    <div
+      className={cn(
+        "rounded-[14px] p-3 text-left",
+        variant === "landing" || variant === "dashboard"
+          ? "border border-black/[0.08] bg-[#f4f8ff]"
+          : "border border-white/[0.08] bg-white/[0.03]",
+      )}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <p
+            className={cn(
+              "inline-flex items-center gap-2 text-[11px] font-normal uppercase tracking-[0.2em]",
+              variant === "landing" || variant === "dashboard" ? "text-black/54" : "text-white/52",
+            )}
+          >
+            <LayoutDashboard className="h-3.5 w-3.5" />
+            Macro Dashboard Ready
+          </p>
+          <p className={cn("text-sm", variant === "landing" || variant === "dashboard" ? "text-black/76" : "text-white/78")}>
+            Open the <span className="font-medium">{label}</span> macro dashboard
+            for rates, inflation, growth, charts, and a dedicated macro agent.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className={cn(
+            "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[10px] px-4 text-sm font-medium transition-colors",
+            variant === "landing" || variant === "dashboard"
+              ? "border border-black/[0.08] bg-[#1080ff] text-white hover:bg-[#006fe6]"
+              : "border border-white/[0.1] bg-white text-black hover:bg-white/92",
+          )}
+        >
+          Open {label}
           <ArrowUpRight className="h-4 w-4" />
         </button>
       </div>

@@ -62,6 +62,16 @@ export interface MacroDataPoint {
   value: number;
 }
 
+export type MacroIndicatorSlug =
+  | "fed-funds"
+  | "cpi"
+  | "gdp-growth"
+  | "treasury-10y"
+  | "unemployment";
+
+export type MacroHistoryRange = "1y" | "3y" | "5y" | "10y" | "max";
+export type MacroCountry = "us" | "fr";
+
 export interface MacroIndicator {
   series_id: string;
   name: string;
@@ -119,6 +129,8 @@ export interface NewsResponse {
 export interface AgentRequest {
   query: string;
   ticker?: string;
+  dashboard_context?: "macro";
+  country?: MacroCountry;
 }
 
 export type AgentEventType =

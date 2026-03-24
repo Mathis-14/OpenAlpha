@@ -11,7 +11,12 @@ router = APIRouter(prefix="/api/agent", tags=["agent"])
 async def agent_chat(request: AgentRequest) -> StreamingResponse:
     """Chat with the OpenAlpha AI agent. Returns Server-Sent Events."""
     return StreamingResponse(
-        run_agent(query=request.query, ticker=request.ticker),
+        run_agent(
+            query=request.query,
+            ticker=request.ticker,
+            dashboard_context=request.dashboard_context,
+            country=request.country,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

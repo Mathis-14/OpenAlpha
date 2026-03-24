@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from app.agent.tools import _execute_tool
+from app.models.macro import MacroCountry
 from app.models.macro import MacroDataPoint
 from app.models.macro import MacroIndicator
 from app.models.macro import MacroSnapshot
@@ -85,7 +86,7 @@ async def test_stock_overview_display_uses_count_units_for_volume(
 
 @pytest.mark.anyio
 @patch(
-    "app.agent.tools.fred_service.get_macro_snapshot",
+    "app.agent.tools.fred_service.get_macro_snapshot_for_country",
     new_callable=AsyncMock,
 )
 async def test_macro_display_respects_indicator_units(
@@ -108,3 +109,19 @@ async def test_macro_display_respects_indicator_units(
             },
         }
     ]
+    mock_get_snapshot.assert_awaited_once()
+
+
+@pytest.mark.anyio
+@patch(
+    "app.agent.tools.fred_service.get_macro_snapshot_for_country",
+    new_callable=AsyncMock,
+)
+async def test_macro_tool_forwards_country_context(
+    mock_get_snapshot: AsyncMock,
+) -> None:
+    mock_get_snapshot.return_value = _fake_snapshot()
+
+    await _execute_tool("get_macro_snapshot", {"country": "fr"})
+
+    mock_get_snapshot.assert_awaited_once_with(MacroCountry.FR)

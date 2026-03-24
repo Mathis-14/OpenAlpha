@@ -1,8 +1,13 @@
 import { getApiBaseUrl } from "@/lib/api-base";
 import type {
+  AgentRequest,
   AgentEvent,
   FilingsResponse,
   Fundamentals,
+  MacroCountry,
+  MacroHistoryRange,
+  MacroIndicator,
+  MacroIndicatorSlug,
   MacroSnapshot,
   MarketResponse,
   NewsResponse,
@@ -56,8 +61,16 @@ export function getPriceHistory(
 
 // ── Macro ───────────────────────────────────────────────────────────────────
 
-export function getMacroSnapshot(): Promise<MacroSnapshot> {
-  return fetchJson("/api/macro");
+export function getMacroSnapshot(country: MacroCountry = "us"): Promise<MacroSnapshot> {
+  return fetchJson(`/api/macro?country=${country}`);
+}
+
+export function getMacroSeries(
+  indicator: MacroIndicatorSlug,
+  range: MacroHistoryRange = "5y",
+  country: MacroCountry = "us",
+): Promise<MacroIndicator> {
+  return fetchJson(`/api/macro/series/${indicator}?range=${range}&country=${country}`);
 }
 
 // ── Filings ─────────────────────────────────────────────────────────────────
@@ -103,14 +116,13 @@ export async function searchTickers(
 // ── Agent SSE ────────────────────────────────────────────────────────────────
 
 export async function* streamAgent(
-  query: string,
-  ticker?: string,
+  request: AgentRequest,
   signal?: AbortSignal,
 ): AsyncGenerator<AgentEvent> {
   const res = await fetch(`${getApiBaseUrl()}/api/agent`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, ticker }),
+    body: JSON.stringify(request),
     signal,
   });
 
