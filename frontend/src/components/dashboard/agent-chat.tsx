@@ -1,20 +1,22 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { streamAgent, type AgentSSE } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import MarkdownMessage from "@/components/markdown-message";
 import {
+  AlertTriangle,
+  ArrowUpRight,
   Bot,
+  CheckCircle2,
+  LayoutDashboard,
   Loader2,
   Send,
   Wrench,
-  CheckCircle2,
   XCircle,
-  AlertTriangle,
 } from "lucide-react";
-
-// ── Types ────────────────────────────────────────────────────────────────────
 
 interface ToolCallEntry {
   type: "tool_call";
@@ -65,7 +67,11 @@ interface ChatMessage {
   entries?: ChatEntry[];
 }
 
-// ── Suggested questions ──────────────────────────────────────────────────────
+interface AgentChatProps {
+  ticker?: string;
+  variant?: "dashboard" | "landing";
+  autoFocusInput?: boolean;
+}
 
 const TICKER_SUGGESTIONS = [
   "Give me a quick overview of this stock",
@@ -83,14 +89,19 @@ const GENERAL_SUGGESTIONS = [
   "Summarize the latest macro outlook",
 ];
 
-// ── Component ────────────────────────────────────────────────────────────────
-
-export default function AgentChat({ ticker }: { ticker?: string }) {
+export default function AgentChat({
+  ticker,
+  variant = "dashboard",
+  autoFocusInput = false,
+}: AgentChatProps) {
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const isLanding = variant === "landing";
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -206,28 +217,98 @@ export default function AgentChat({ ticker }: { ticker?: string }) {
   );
 
   return (
-    <Card className="flex h-full flex-col border-border/40 bg-card/60">
-      <CardHeader className="shrink-0 pb-3">
-        <CardTitle className="flex items-center gap-2">
-          <Bot className="h-5 w-5 text-primary" />
-          AI Agent
-        </CardTitle>
+    <Card
+      className={cn(
+        "flex h-full flex-col overflow-hidden border backdrop-blur-xl",
+        isLanding
+          ? "rounded-[2.2rem] border-white/[0.12] bg-[linear-gradient(180deg,rgba(16,20,43,0.88),rgba(8,10,22,0.84))] shadow-[0_56px_130px_-56px_rgba(83,74,183,0.88)]"
+          : "border-border/40 bg-card/60",
+      )}
+    >
+      <CardHeader
+        className={cn(
+          "shrink-0",
+          isLanding ? "pb-3 pt-7" : "pb-3",
+        )}
+      >
+        {isLanding ? (
+          <div className="space-y-4 text-center">
+            <div className="flex justify-center">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.06] px-4 py-1.5 text-[11px] font-medium uppercase tracking-[0.24em] text-primary/90 backdrop-blur-md">
+                <Bot className="h-3.5 w-3.5" />
+                Speak to Alpha
+              </span>
+            </div>
+            <div className="space-y-3">
+              <CardTitle className="text-[2rem] font-semibold tracking-tight sm:text-[2.25rem]">
+                Ask Alpha
+              </CardTitle>
+              <p className="mx-auto max-w-2xl text-sm leading-7 text-muted-foreground sm:text-[15px]">
+                Ask about any stock, market trend, or economic signal. When the
+                conversation becomes specific, you can jump into the stock
+                dashboard.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <CardTitle className="flex items-center gap-2">
+            <Bot className="h-5 w-5 text-primary" />
+            AI Agent
+          </CardTitle>
+        )}
       </CardHeader>
 
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-3">
+      <CardContent
+        className={cn(
+          "flex min-h-0 flex-1 flex-col",
+          isLanding ? "gap-5 px-5 pb-5 sm:px-6 sm:pb-6" : "gap-3",
+        )}
+      >
         <div
           ref={scrollRef}
-          className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-lg bg-background/40 p-4"
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto",
+            isLanding
+              ? "space-y-5 px-1 pb-1 pt-1"
+              : "space-y-4 rounded-lg bg-background/40 p-4",
+          )}
         >
           {showSuggestions && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">{introText}</p>
-              <div className="flex flex-wrap gap-2">
+            <div
+              className={cn(
+                "space-y-4",
+                isLanding &&
+                  "flex min-h-full flex-col items-center justify-center text-center",
+              )}
+            >
+              <div className="space-y-4">
+                <p
+                  className={cn(
+                    "text-muted-foreground",
+                    isLanding
+                      ? "mx-auto max-w-2xl text-[15px] leading-7"
+                      : "text-sm",
+                  )}
+                >
+                  {introText}
+                </p>
+              </div>
+              <div
+                className={cn(
+                  "flex flex-wrap gap-2.5",
+                  isLanding && "justify-center",
+                )}
+              >
                 {suggestions.map((s) => (
                   <button
                     key={s}
                     onClick={() => handleSend(s)}
-                    className="rounded-full border border-border/50 bg-card/60 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                    className={cn(
+                      "rounded-full border transition-colors",
+                      isLanding
+                        ? "border-white/10 bg-white/[0.045] px-4 py-2.5 text-xs font-medium text-foreground/85 backdrop-blur-sm hover:border-primary/40 hover:bg-primary/10 hover:text-foreground"
+                        : "border-border/50 bg-card/60 px-3 py-1.5 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                    )}
                   >
                     {s}
                   </button>
@@ -241,6 +322,8 @@ export default function AgentChat({ ticker }: { ticker?: string }) {
               key={i}
               message={msg}
               streaming={streaming && i === messages.length - 1}
+              variant={variant}
+              onOpenTicker={(symbol) => router.push(`/dashboard/${symbol}`)}
             />
           ))}
         </div>
@@ -250,21 +333,39 @@ export default function AgentChat({ ticker }: { ticker?: string }) {
             e.preventDefault();
             handleSend(input);
           }}
-          className="flex shrink-0 gap-2"
+          className={cn(
+            "shrink-0",
+            isLanding
+              ? "flex flex-col gap-3 border-t border-white/[0.08] pt-4 sm:flex-row"
+              : "flex gap-2",
+          )}
         >
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={placeholderText}
-            disabled={streaming}
-            className="h-10 flex-1 rounded-lg border border-border/50 bg-background/60 px-4 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-primary/50 disabled:opacity-50"
-          />
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              autoFocus={autoFocusInput}
+              placeholder={placeholderText}
+              disabled={streaming}
+              className={cn(
+                "w-full border text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-primary/50 disabled:opacity-50",
+                isLanding
+                  ? "h-[3.4rem] rounded-[1.7rem] border-white/10 bg-white/[0.035] px-5 text-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-sm"
+                  : "h-10 rounded-lg border-border/50 bg-background/60 px-4 text-sm",
+              )}
+            />
+          </div>
           {streaming ? (
             <button
               type="button"
               onClick={handleStop}
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-destructive/10 px-4 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20"
+              className={cn(
+                "inline-flex shrink-0 items-center justify-center gap-1.5 font-medium transition-colors",
+                isLanding
+                  ? "h-[3.4rem] rounded-[1.7rem] bg-destructive/10 px-5 text-sm text-destructive hover:bg-destructive/20"
+                  : "h-10 rounded-lg bg-destructive/10 px-4 text-sm text-destructive hover:bg-destructive/20",
+              )}
             >
               Stop
             </button>
@@ -272,9 +373,16 @@ export default function AgentChat({ ticker }: { ticker?: string }) {
             <button
               type="submit"
               aria-disabled={!input.trim() || undefined}
-              className={`inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 ${!input.trim() ? "pointer-events-none opacity-50" : ""}`}
+              className={cn(
+                "inline-flex shrink-0 items-center justify-center gap-1.5 font-medium transition-colors",
+                isLanding
+                  ? "h-[3.4rem] rounded-[1.7rem] bg-primary px-5 text-sm text-primary-foreground shadow-[0_18px_36px_-18px_rgba(83,74,183,0.88)] hover:bg-primary/90"
+                  : "h-10 rounded-lg bg-primary px-4 text-sm text-primary-foreground hover:bg-primary/90",
+                !input.trim() && "pointer-events-none opacity-50",
+              )}
             >
               <Send className="h-4 w-4" />
+              {isLanding && <span>Ask</span>}
             </button>
           )}
         </form>
@@ -282,8 +390,6 @@ export default function AgentChat({ ticker }: { ticker?: string }) {
     </Card>
   );
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function sseToEntry(sse: AgentSSE): ChatEntry | null {
   switch (sse.event) {
@@ -326,17 +432,49 @@ function sseToEntry(sse: AgentSSE): ChatEntry | null {
   }
 }
 
+function getSuggestedTicker(entries: ChatEntry[]): string | null {
+  const symbols = Array.from(
+    new Set(
+      entries.flatMap((entry) => {
+        if (entry.type !== "tool_call") {
+          return [];
+        }
+
+        const candidate = entry.arguments.symbol ?? entry.arguments.ticker;
+        if (typeof candidate !== "string" || !candidate.trim()) {
+          return [];
+        }
+
+        return [candidate.trim().toUpperCase()];
+      }),
+    ),
+  );
+
+  return symbols.length === 1 ? symbols[0] : null;
+}
+
 function MessageBubble({
   message,
   streaming,
+  variant,
+  onOpenTicker,
 }: {
   message: ChatMessage;
   streaming: boolean;
+  variant: "dashboard" | "landing";
+  onOpenTicker: (ticker: string) => void;
 }) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-2xl rounded-br-md bg-primary/15 px-4 py-2.5 text-sm text-foreground">
+        <div
+          className={cn(
+            "max-w-[80%] rounded-2xl rounded-br-md px-4 py-2.5 text-sm text-foreground",
+            variant === "landing"
+              ? "bg-primary/18 shadow-[0_20px_34px_-24px_rgba(83,74,183,0.9)]"
+              : "bg-primary/15",
+          )}
+        >
           {message.content}
         </div>
       </div>
@@ -357,10 +495,11 @@ function MessageBubble({
   const errorEntries = entries.filter(
     (e): e is ErrorEntry => e.type === "error",
   );
+  const suggestedTicker =
+    variant === "landing" ? getSuggestedTicker(entries) : null;
 
   return (
-    <div className="space-y-2">
-      {/* Tool calls */}
+    <div className="space-y-2.5">
       {toolEntries.length > 0 && (
         <div className="space-y-1">
           {toolEntries.map((entry, i) => (
@@ -369,17 +508,21 @@ function MessageBubble({
         </div>
       )}
 
-      {/* Display metrics */}
+      {suggestedTicker && (
+        <DashboardSuggestionCard
+          symbol={suggestedTicker}
+          onOpen={() => onOpenTicker(suggestedTicker)}
+        />
+      )}
+
       {displayMetrics.map((entry, i) => (
         <MetricDisplay key={`metric-${i}`} metrics={entry.metrics} />
       ))}
 
-      {/* Display charts */}
       {displayCharts.map((entry, i) => (
         <ChartDisplay key={`chart-${i}`} entry={entry} />
       ))}
 
-      {/* Text response */}
       {message.content && (
         <div className="flex gap-2.5">
           <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15">
@@ -391,7 +534,6 @@ function MessageBubble({
         </div>
       )}
 
-      {/* Errors */}
       {errorEntries.map((entry, i) => (
         <div key={i} className="flex items-start gap-2 text-sm text-destructive">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -399,7 +541,6 @@ function MessageBubble({
         </div>
       ))}
 
-      {/* Streaming indicator */}
       {streaming && !message.content && errorEntries.length === 0 && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -410,19 +551,58 @@ function MessageBubble({
   );
 }
 
+function DashboardSuggestionCard({
+  symbol,
+  onOpen,
+}: {
+  symbol: string;
+  onOpen: () => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-primary/20 bg-primary/10 p-3 shadow-[0_24px_40px_-28px_rgba(83,74,183,0.9)]">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <p className="inline-flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.2em] text-primary/90">
+            <LayoutDashboard className="h-3.5 w-3.5" />
+            Stock Workspace Ready
+          </p>
+          <p className="text-sm text-foreground">
+            Open the <span className="font-mono font-semibold">{symbol}</span>{" "}
+            dashboard for charts, fundamentals, filings, and a dedicated stock
+            agent.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-primary/30 bg-primary/15 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+        >
+          Open {symbol}
+          <ArrowUpRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ToolBadge({ entry }: { entry: ToolCallEntry | ToolResultEntry }) {
   if (entry.type === "tool_call") {
     return (
       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Wrench className="h-3 w-3" />
         <span>
-          Calling <span className="font-mono font-medium text-foreground/70">{entry.name}</span>
+          Calling{" "}
+          <span className="font-mono font-medium text-foreground/70">
+            {entry.name}
+          </span>
         </span>
         {Object.keys(entry.arguments).length > 0 && (
           <span className="font-mono text-muted-foreground/60">
-            ({Object.entries(entry.arguments)
+            (
+            {Object.entries(entry.arguments)
               .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-              .join(", ")})
+              .join(", ")}
+            )
           </span>
         )}
       </div>
@@ -489,12 +669,18 @@ function ChartDisplay({ entry }: { entry: DisplayChartEntry }) {
           <span className="ml-1.5 text-muted-foreground">{entry.period}</span>
         </span>
         <span
-          className={`text-xs font-mono font-semibold ${positive ? "text-positive" : "text-negative"}`}
+          className={`text-xs font-mono font-semibold ${
+            positive ? "text-positive" : "text-negative"
+          }`}
         >
           ${closes[closes.length - 1].toFixed(2)}
         </span>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="h-16 w-full" preserveAspectRatio="none">
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        className="h-16 w-full"
+        preserveAspectRatio="none"
+      >
         <polyline
           points={polyline}
           fill="none"
