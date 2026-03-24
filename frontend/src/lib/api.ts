@@ -1,5 +1,6 @@
 import { getApiBaseUrl } from "@/lib/api-base";
 import type {
+  AgentEvent,
   FilingsResponse,
   Fundamentals,
   MacroSnapshot,
@@ -101,27 +102,11 @@ export async function searchTickers(
 
 // ── Agent SSE ────────────────────────────────────────────────────────────────
 
-export type AgentEventType =
-  | "tool_call"
-  | "tool_result"
-  | "text"
-  | "text_delta"
-  | "display_chart"
-  | "display_metric"
-  | "display_table"
-  | "done"
-  | "error";
-
-export interface AgentSSE {
-  event: AgentEventType;
-  data: Record<string, unknown>;
-}
-
 export async function* streamAgent(
   query: string,
   ticker?: string,
   signal?: AbortSignal,
-): AsyncGenerator<AgentSSE> {
+): AsyncGenerator<AgentEvent> {
   const res = await fetch(`${getApiBaseUrl()}/api/agent`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -138,31 +123,36 @@ export async function* streamAgent(
   const decoder = new TextDecoder();
   let buffer = "";
 
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop() ?? "";
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
 
-    for (const part of parts) {
-      const lines = part.split("\n");
-      let event = "";
-      let data = "";
-      for (const line of lines) {
-        if (line.startsWith("event: ")) event = line.slice(7);
-        else if (line.startsWith("data: ")) data = line.slice(6);
-      }
-      if (event && data) {
-        try {
-          yield { event: event as AgentEventType, data: JSON.parse(data) };
-        } catch {
-          /* skip malformed events */
+      for (const part of parts) {
+        const lines = part.split("\n");
+        let event = "";
+        let data = "";
+        for (const line of lines) {
+          if (line.startsWith("event: ")) event = line.slice(7);
+          else if (line.startsWith("data: ")) data = line.slice(6);
+        }
+        if (event && data) {
+          try {
+            yield { event: event as AgentEvent["event"], data: JSON.parse(data) };
+          } catch {
+            /* skip malformed events */
+          }
         }
       }
     }
+  } finally {
+    reader.releaseLock();
   }
 }
 
 export { ApiError };
+export type { AgentEvent as AgentSSE } from "@/types/api";
