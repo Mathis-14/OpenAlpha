@@ -82,4 +82,66 @@ export function getNews(
   return fetchJson(`/api/news/${ticker}?limit=${limit}`);
 }
 
+// ── Agent SSE ────────────────────────────────────────────────────────────────
+
+export type AgentEventType =
+  | "tool_call"
+  | "tool_result"
+  | "text"
+  | "done"
+  | "error";
+
+export interface AgentSSE {
+  event: AgentEventType;
+  data: Record<string, unknown>;
+}
+
+export async function* streamAgent(
+  query: string,
+  ticker?: string,
+  signal?: AbortSignal,
+): AsyncGenerator<AgentSSE> {
+  const res = await fetch(`${BASE_URL}/api/agent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, ticker }),
+    signal,
+  });
+
+  if (!res.ok || !res.body) {
+    const body = await res.text().catch(() => "");
+    throw new ApiError(res.status, body || res.statusText);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+
+    for (const part of parts) {
+      const lines = part.split("\n");
+      let event = "";
+      let data = "";
+      for (const line of lines) {
+        if (line.startsWith("event: ")) event = line.slice(7);
+        else if (line.startsWith("data: ")) data = line.slice(6);
+      }
+      if (event && data) {
+        try {
+          yield { event: event as AgentEventType, data: JSON.parse(data) };
+        } catch {
+          /* skip malformed events */
+        }
+      }
+    }
+  }
+}
+
 export { ApiError };
