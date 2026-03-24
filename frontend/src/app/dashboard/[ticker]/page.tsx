@@ -9,6 +9,7 @@ import FundamentalsGrid from "@/components/dashboard/fundamentals-grid";
 import NewsFeed from "@/components/dashboard/news-feed";
 import FilingsPanel from "@/components/dashboard/filings-panel";
 import AgentChat from "@/components/dashboard/agent-chat";
+import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import {
   getMarketData,
   getNews,
@@ -54,11 +55,44 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
           : "Something went wrong loading market data.";
   }
 
+  const dataWidgets = (
+    <>
+      {market ? (
+        <>
+          <OverviewCard data={market.overview} />
+          <PriceChart
+            ticker={symbol}
+            initialData={market.price_history}
+            initialPeriod="1mo"
+          />
+          <FundamentalsGrid data={market.fundamentals} />
+        </>
+      ) : (
+        <Card className="border-destructive/40 bg-card/60">
+          <CardHeader>
+            <CardTitle className="text-destructive">{symbol}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">{marketError}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <NewsFeed articles={news.articles} />
+        <FilingsPanel filings={filings.filings} />
+      </div>
+    </>
+  );
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b border-border/40 bg-background/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-3">
-          <Link href="/" className="shrink-0 transition-opacity hover:opacity-80">
+        <div className="mx-auto flex max-w-[1440px] items-center gap-4 px-6 py-3">
+          <Link
+            href="/"
+            className="shrink-0 transition-opacity hover:opacity-80"
+          >
             <Image
               src="/openalpha_logo.svg"
               alt="OpenAlpha"
@@ -67,58 +101,20 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
               className="h-8 w-auto"
             />
           </Link>
-          <div className="flex-1 max-w-md">
+          <div className="max-w-md flex-1">
             <TickerSearch />
           </div>
-          <Badge variant="outline" className="text-sm font-mono">
+          <Badge variant="outline" className="font-mono text-sm">
             {symbol}
           </Badge>
         </div>
       </header>
 
       <main className="mx-auto max-w-[1440px] px-6 py-8">
-        <div className="flex gap-6">
-          {/* Left column — data widgets */}
-          <div className="min-w-0 flex-1 space-y-6">
-            {market ? (
-              <>
-                <OverviewCard data={market.overview} />
-                <PriceChart
-                  ticker={symbol}
-                  initialData={market.price_history}
-                  initialPeriod="1mo"
-                />
-                <FundamentalsGrid data={market.fundamentals} />
-              </>
-            ) : (
-              <Card className="border-destructive/40 bg-card/60">
-                <CardHeader>
-                  <CardTitle className="text-destructive">{symbol}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">{marketError}</p>
-                </CardContent>
-              </Card>
-            )}
-
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <NewsFeed articles={news.articles} />
-              <FilingsPanel filings={filings.filings} />
-            </div>
-          </div>
-
-          {/* Right column — AI agent (sticky, collapsible) */}
-          <aside className="hidden w-[380px] shrink-0 xl:block">
-            <div className="sticky top-20">
-              <AgentChat ticker={symbol} />
-            </div>
-          </aside>
-        </div>
-
-        {/* Agent chat below content on smaller screens */}
-        <div className="mt-6 xl:hidden">
-          <AgentChat ticker={symbol} />
-        </div>
+        <DashboardLayout
+          dataWidgets={dataWidgets}
+          agentPanel={<AgentChat ticker={symbol} />}
+        />
       </main>
     </div>
   );
