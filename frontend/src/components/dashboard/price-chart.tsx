@@ -42,6 +42,12 @@ export default function PriceChart({
 
   const data = cache[period] ?? initialData;
 
+  function fitChartToData(chart: IChartApi) {
+    requestAnimationFrame(() => {
+      chart.timeScale().fitContent();
+    });
+  }
+
   async function handlePeriodChange(newPeriod: PeriodType) {
     setPeriod(newPeriod);
     if (cache[newPeriod]) return;
@@ -101,12 +107,14 @@ export default function PriceChart({
         close: p.close,
       })) as Parameters<typeof candleSeries.setData>[0],
     );
-    chart.timeScale().fitContent();
+    fitChartToData(chart);
 
     chartRef.current = chart;
 
     const ro = new ResizeObserver(() => {
-      if (el) chart.applyOptions({ width: el.clientWidth });
+      if (!el) return;
+      chart.applyOptions({ width: el.clientWidth });
+      fitChartToData(chart);
     });
     ro.observe(el);
 
