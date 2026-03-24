@@ -10,20 +10,61 @@ interface MarkdownMessageProps {
   content: string;
   className?: string;
   tone?: "default" | "light";
+  streaming?: boolean;
+}
+
+function countUnescaped(content: string, token: string): number {
+  let count = 0;
+  for (let i = 0; i <= content.length - token.length; i += 1) {
+    if (content.slice(i, i + token.length) !== token) {
+      continue;
+    }
+    if (i > 0 && content[i - 1] === "\\") {
+      continue;
+    }
+    count += 1;
+  }
+  return count;
+}
+
+function hasBalancedMathDelimiters(content: string): boolean {
+  const doubleDollars = countUnescaped(content, "$$");
+  const singleDollarSource = content.replaceAll("$$", "");
+  const singleDollars = countUnescaped(singleDollarSource, "$");
+
+  return (
+    doubleDollars % 2 === 0 &&
+    singleDollars % 2 === 0 &&
+    countUnescaped(content, "\\(") === countUnescaped(content, "\\)") &&
+    countUnescaped(content, "\\[") === countUnescaped(content, "\\]")
+  );
+}
+
+function shouldUseMath(content: string, streaming: boolean): boolean {
+  if (streaming) {
+    return false;
+  }
+
+  const mightContainMath =
+    content.includes("$") || content.includes("\\(") || content.includes("\\[");
+
+  return mightContainMath && hasBalancedMathDelimiters(content);
 }
 
 export default function MarkdownMessage({
   content,
   className = "",
   tone = "default",
+  streaming = false,
 }: MarkdownMessageProps) {
   const isLight = tone === "light";
+  const mathEnabled = shouldUseMath(content, streaming);
 
   return (
     <div className={`markdown-message text-left ${className}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex, rehypeHighlight]}
+        remarkPlugins={mathEnabled ? [remarkGfm, remarkMath] : [remarkGfm]}
+        rehypePlugins={mathEnabled ? [rehypeKatex, rehypeHighlight] : [rehypeHighlight]}
         components={{
           h1: ({ children }) => (
             <h3
