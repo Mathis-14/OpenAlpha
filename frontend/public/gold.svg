@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%">
+  <defs>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FCEABB"/>
+      <stop offset="50%" stop-color="#F8B500"/>
+      <stop offset="100%" stop-color="#B37D00"/>
+    </linearGradient>
+
+    <linearGradient id="goldLight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFF5D1"/>
+      <stop offset="100%" stop-color="#FDE08B"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="128" cy="128" r="120" fill="#121212" stroke="url(#goldGrad)" stroke-width="3"/>
+
+  <g>
+    <polygon points="98,70 158,70 165,85 91,85" fill="url(#goldLight)"/>
+    <polygon points="91,85 165,85 173,100 83,100" fill="url(#goldGrad)"/>
+  </g>
+
+  <g>
+    <polygon points="50,110 110,110 117,125 43,125" fill="url(#goldLight)"/>
+    <polygon points="43,125 117,125 125,140 35,140" fill="url(#goldGrad)"/>
+  </g>
+
+  <g>
+    <polygon points="146,110 206,110 213,125 139,125" fill="url(#goldLight)"/>
+    <polygon points="139,125 213,125 221,140 131,140" fill="url(#goldGrad)"/>
+  </g>
+
+  <text x="128" y="185" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="28" fill="url(#goldLight)" text-anchor="middle" letter-spacing="3">XAU</text>
+  <text x="128" y="205" font-family="system-ui, -apple-system, sans-serif" font-weight="500" font-size="12" fill="#888888" text-anchor="middle" letter-spacing="1">GOLD</text>
+</svg>

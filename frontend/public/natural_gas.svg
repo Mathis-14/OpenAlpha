@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="gasGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#87D8FF"/>
+      <stop offset="100%" stop-color="#1080FF"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="32" cy="32" r="20" fill="#EEF5FF" stroke="#BFD9FF" stroke-width="2.5"/>
+  <path
+    d="M32 13 C32 13, 20 28, 20 38 A12 12 0 0 0 44 38 C44 28, 32 13, 32 13 Z"
+    fill="url(#gasGrad)"
+  />
+  <path
+    d="M32 22 C32 22, 26 30, 26 35 A6 6 0 0 0 38 35 C38 30, 32 22, 32 22 Z"
+    fill="#DDF3FF"
+    opacity="0.9"
+  />
+  <text
+    x="32"
+    y="55"
+    font-family="Arial, sans-serif"
+    font-size="8"
+    font-weight="700"
+    fill="#4B6A8B"
+    text-anchor="middle"
+    letter-spacing="0.8"
+  >
+    GAS
+  </text>
+</svg>

@@ -2,6 +2,7 @@ export type ErrorBody = {
   error: string;
   provider?: string;
   ticker?: string;
+  instrument?: string;
   detail?: string;
 };
 

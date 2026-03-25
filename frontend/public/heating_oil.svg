@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <circle cx="32" cy="32" r="20" fill="#FFF1EC" stroke="#E5B6A8" stroke-width="2.5"/>
+  <path d="M26 18c0 0 10 10 10 18a10 10 0 1 1-20 0c0-8 10-18 10-18Z" fill="#2F2F2F"/>
+  <path d="M41 22v16" stroke="#D85A3A" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="41" cy="42" r="4" fill="#D85A3A"/>
+  <text x="32" y="55" font-family="Arial, sans-serif" font-size="7.5" font-weight="700" fill="#8A4733" text-anchor="middle" letter-spacing="0.8">HEAT OIL</text>
+</svg>

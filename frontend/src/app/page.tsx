@@ -10,10 +10,12 @@ import {
   Coins,
   FileSearch,
   Globe,
+  PackageSearch,
   Search,
 } from "lucide-react";
 import LandingSpotlight from "@/components/landing-spotlight";
 import TickerSearch from "@/components/ticker-search";
+import CommoditySearch from "@/components/commodity-search";
 import CryptoSearch from "@/components/crypto-search";
 import AgentChat from "@/components/dashboard/agent-chat";
 
@@ -44,7 +46,7 @@ export default function LandingPage() {
   const router = useRouter();
   const [showAgent, setShowAgent] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
-  const [browseMode, setBrowseMode] = useState<"stocks" | "crypto">("stocks");
+  const [browseMode, setBrowseMode] = useState<"stocks" | "commodities" | "crypto">("stocks");
   const agentShellRef = useRef<HTMLDivElement>(null);
   const shouldScrollToAgentRef = useRef(false);
 
@@ -88,24 +90,45 @@ export default function LandingPage() {
           </p>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <button
             type="button"
             onClick={() => {
               setBrowseMode("stocks");
               setShowBrowse(true);
             }}
-            className="flex items-start gap-3 rounded-[14px] border border-[#1080ff]/18 bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
+            className="flex h-full items-start gap-3 rounded-[14px] border border-[#1080ff]/18 bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
           >
             <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
               <Search className="h-4 w-4" />
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium text-[#161616]">
-                Browse stocks
+                Stocks
               </p>
-              <p className="text-sm font-light leading-6 text-black/62">
-                Open an equity workspace directly.
+              <p className="text-xs font-light leading-5 text-black/62">
+                Equity dashboards.
+              </p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setBrowseMode("commodities");
+              setShowBrowse(true);
+            }}
+            className="flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
+          >
+            <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
+              <PackageSearch className="h-4 w-4" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-[#161616]">
+                Commodities
+              </p>
+              <p className="text-xs font-light leading-5 text-black/62">
+                Metals, energy, crops.
               </p>
             </div>
           </button>
@@ -113,17 +136,17 @@ export default function LandingPage() {
           <button
             type="button"
             onClick={() => router.push("/macro")}
-            className="flex items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
+            className="flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
           >
             <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
               <Globe className="h-4 w-4" />
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium text-[#161616]">
-                Browse macro
+                Macro
               </p>
-              <p className="text-sm font-light leading-6 text-black/62">
-                Explore rates, inflation, and growth data.
+              <p className="whitespace-nowrap text-xs font-light leading-5 text-black/62">
+                Rates, inflation, growth.
               </p>
             </div>
           </button>
@@ -134,17 +157,17 @@ export default function LandingPage() {
               setBrowseMode("crypto");
               setShowBrowse(true);
             }}
-            className="flex items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
+            className="flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
           >
             <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
               <Coins className="h-4 w-4" />
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium text-[#161616]">
-                Browse crypto
+                Crypto
               </p>
-              <p className="text-sm font-light leading-6 text-black/62">
-                Review BTC and ETH perpetuals with Deribit market data.
+              <p className="text-xs font-light leading-5 text-black/62">
+                BTC, ETH, more soon.
               </p>
             </div>
           </button>
@@ -250,7 +273,9 @@ export default function LandingPage() {
                   <h2 className="text-xl font-medium tracking-tight text-[#161616]">
                     {browseMode === "stocks"
                       ? "Open a stock workspace in one move"
-                      : "Open a crypto dashboard in one move"}
+                      : browseMode === "commodities"
+                        ? "Open a commodity dashboard in one move"
+                        : "Open a crypto dashboard in one move"}
                   </h2>
                   <div className="flex justify-center gap-2">
                     <button
@@ -263,6 +288,17 @@ export default function LandingPage() {
                       }`}
                     >
                       Stocks
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBrowseMode("commodities")}
+                      className={`inline-flex h-9 items-center justify-center rounded-[10px] px-3.5 text-sm transition-colors ${
+                        browseMode === "commodities"
+                          ? "bg-[#1080ff] text-white"
+                          : "border border-black/[0.08] bg-white text-black/62 hover:bg-[#f4f8ff] hover:text-[#161616]"
+                      }`}
+                    >
+                      Commodities
                     </button>
                     <button
                       type="button"
@@ -279,6 +315,12 @@ export default function LandingPage() {
                 </div>
                 {browseMode === "stocks" ? (
                   <TickerSearch
+                    size="lg"
+                    variant="hero"
+                    autoFocus={!showAgent}
+                  />
+                ) : browseMode === "commodities" ? (
+                  <CommoditySearch
                     size="lg"
                     variant="hero"
                     autoFocus={!showAgent}

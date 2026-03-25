@@ -142,6 +142,56 @@ export interface CryptoOverview {
   current_funding: number | null;
 }
 
+// ── Commodity Data (Yahoo futures + benchmark metadata) ────────────────────
+
+export type CommodityInstrumentSlug =
+  | "gold"
+  | "silver"
+  | "wti"
+  | "brent"
+  | "natural-gas"
+  | "copper"
+  | "gasoline"
+  | "aluminum"
+  | "wheat"
+  | "coffee"
+  | "cocoa"
+  | "heating-oil"
+  | "propane"
+  | "coal"
+  | "uranium"
+  | "all-commodities-index";
+
+export type CommodityCategory = "energy" | "metals" | "agriculture" | "index";
+export type CommodityRange = PeriodType;
+
+export interface CommodityDiscoveryItem {
+  instrument: CommodityInstrumentSlug;
+  name: string;
+  short_label: string;
+  description: string;
+  category: CommodityCategory;
+  unit_label: string;
+  exchange_label: string;
+  source_label: string;
+}
+
+export interface CommodityOverview extends CommodityDiscoveryItem {
+  provider_symbol: string;
+  currency: string;
+  current_price: number;
+  previous_close: number;
+  change: number;
+  change_percent: number;
+  volume: number | null;
+  open_interest: number | null;
+  day_high: number | null;
+  day_low: number | null;
+  fifty_two_week_high: number | null;
+  fifty_two_week_low: number | null;
+  market_state: string | null;
+}
+
 // ── SEC Filings (EDGAR) ─────────────────────────────────────────────────────
 
 export interface FilingSection {
@@ -182,9 +232,10 @@ export interface NewsResponse {
 export interface AgentRequest {
   query: string;
   ticker?: string;
-  dashboard_context?: "macro" | "crypto";
+  dashboard_context?: "macro" | "crypto" | "commodity";
   country?: MacroCountry;
   crypto_instrument?: CryptoInstrument;
+  commodity_instrument?: CommodityInstrumentSlug;
 }
 
 export type AgentEventType =

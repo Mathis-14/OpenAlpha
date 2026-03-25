@@ -63,6 +63,7 @@ export default function MarkdownMessage({
   return (
     <div className={`markdown-message text-left ${className}`}>
       <ReactMarkdown
+        skipHtml
         remarkPlugins={mathEnabled ? [remarkGfm, remarkMath] : [remarkGfm]}
         rehypePlugins={mathEnabled ? [rehypeKatex, rehypeHighlight] : [rehypeHighlight]}
         components={{

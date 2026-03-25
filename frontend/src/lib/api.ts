@@ -1,6 +1,10 @@
 import type {
   AgentRequest,
   AgentEvent,
+  CommodityDiscoveryItem,
+  CommodityInstrumentSlug,
+  CommodityOverview,
+  CommodityRange,
   CryptoDiscoveryItem,
   CryptoInstrument,
   CryptoOverview,
@@ -76,6 +80,27 @@ export function getMacroSeries(
   country: MacroCountry = "us",
 ): Promise<MacroIndicator> {
   return fetchJson(`/api/macro/series/${indicator}?range=${range}&country=${country}`);
+}
+
+// ── Commodities ─────────────────────────────────────────────────────────────
+
+export function getCommodityInstruments(): Promise<CommodityDiscoveryItem[]> {
+  return fetchJson("/api/commodities/instruments");
+}
+
+export function getCommodityOverview(
+  instrument: CommodityInstrumentSlug,
+): Promise<CommodityOverview> {
+  return fetchJson(`/api/commodities/${encodeURIComponent(instrument)}`);
+}
+
+export function getCommodityPriceHistory(
+  instrument: CommodityInstrumentSlug,
+  range: CommodityRange = "1mo",
+): Promise<PricePoint[]> {
+  return fetchJson(
+    `/api/commodities/${encodeURIComponent(instrument)}/history?range=${range}`,
+  );
 }
 
 // ── Crypto ──────────────────────────────────────────────────────────────────
