@@ -31,10 +31,10 @@ export default function OverviewCard({ data }: { data: TickerOverview }) {
 
   return (
     <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] transition-colors hover:border-black/[0.12]">
-      <CardHeader>
+      <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div>
-            <CardTitle className="text-2xl font-medium tracking-tight text-[#161616]">
+            <CardTitle className="text-[1.9rem] font-medium tracking-tight text-[#161616]">
               {data.name}
             </CardTitle>
             <p className="mt-0.5 text-sm font-light text-black/56">
@@ -54,9 +54,9 @@ export default function OverviewCard({ data }: { data: TickerOverview }) {
           </Badge>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-0">
         <div className="flex items-baseline gap-3">
-          <span className="text-4xl font-medium tabular-nums tracking-tight text-[#161616]">
+          <span className="text-[2.3rem] font-medium tabular-nums tracking-tight text-[#161616]">
             {fmtPrice(data.current_price, data.currency)}
           </span>
           <span
@@ -67,7 +67,7 @@ export default function OverviewCard({ data }: { data: TickerOverview }) {
           </span>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-4">
+        <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
           <Stat label="Prev Close" value={fmtPrice(data.previous_close, data.currency)} />
           <Stat label="Volume" value={fmtCompact(data.volume)} />
           <Stat label="Market Cap" value={fmtCompact(data.market_cap)} />

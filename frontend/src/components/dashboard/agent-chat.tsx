@@ -359,7 +359,7 @@ export default function AgentChat({
   return (
     <Card
       className={cn(
-        "flex flex-col overflow-hidden border backdrop-blur-xl",
+        "flex h-full min-h-0 flex-col overflow-hidden border backdrop-blur-xl",
         isLanding
           ? cn(
               "rounded-[16px] border-black/[0.08] bg-white shadow-[0_34px_70px_-40px_rgba(0,0,0,0.12)]",
@@ -415,7 +415,7 @@ export default function AgentChat({
 
       <CardContent
         className={cn(
-          "flex min-h-0 flex-1 flex-col",
+          "flex min-h-0 flex-1 flex-col overflow-hidden",
           isLanding ? "gap-3 px-5 pb-4 text-left sm:px-6 sm:pb-4" : "gap-3",
         )}
       >
@@ -425,8 +425,8 @@ export default function AgentChat({
             isLanding
               ? landingCompactEmpty
                 ? "space-y-3 px-1 pb-0 pt-0 text-left"
-                : "min-h-0 flex-1 overflow-y-auto space-y-4 px-1 pb-1 pt-0 text-left"
-              : "min-h-0 flex-1 overflow-y-auto space-y-4 rounded-[14px] border border-black/[0.08] bg-[#f8fbff] p-4 pr-3",
+                : "min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-4 px-1 pb-1 pt-0 text-left"
+              : "min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-4 rounded-[14px] border border-black/[0.08] bg-[#f8fbff] p-4 pr-3",
           )}
         >
           {showSuggestions && (
@@ -482,7 +482,7 @@ export default function AgentChat({
 
           {messages.map((msg, i) => (
             <MessageBubble
-              key={i}
+              key={`${msg.role}-${i}-${msg.content.slice(0, 32)}`}
               message={msg}
               streaming={streaming && i === messages.length - 1}
               variant={variant}
@@ -808,7 +808,11 @@ function MessageBubble({
       {toolEntries.length > 0 && (
         <div className="space-y-1">
           {toolEntries.map((entry, i) => (
-            <ToolBadge key={i} entry={entry} variant={variant} />
+            <ToolBadge
+              key={`${entry.type}-${entry.name}-${i}`}
+              entry={entry}
+              variant={variant}
+            />
           ))}
         </div>
       )}
@@ -893,7 +897,10 @@ function MessageBubble({
       )}
 
       {errorEntries.map((entry, i) => (
-        <div key={i} className="flex items-start gap-2 text-sm text-destructive">
+        <div
+          key={`error-${entry.message.slice(0, 32)}-${i}`}
+          className="flex items-start gap-2 text-sm text-destructive"
+        >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           {entry.message}
         </div>

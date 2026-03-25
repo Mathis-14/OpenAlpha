@@ -82,38 +82,52 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
     ? filingsResult.data
     : { ticker: symbol, filings: [] };
 
-  const dataWidgets = [
-    market ? (
-      <OverviewCard key="overview" data={market.overview} />
-    ) : (
-      <Card
-        key="market-error"
-        className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
-      >
-        <CardHeader>
-          <CardTitle className="text-[#161616]">{symbol}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm font-light text-black/64">{marketError}</p>
-        </CardContent>
-      </Card>
+  const topWidgets = market ? (
+    <OverviewCard key="overview" data={market.overview} />
+  ) : (
+    <Card
+      key="market-error"
+      className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
+    >
+      <CardHeader>
+        <CardTitle className="text-[#161616]">{symbol}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm font-light text-black/64">{marketError}</p>
+      </CardContent>
+    </Card>
+  );
+
+  const chartWidget = market ? (
+    <PriceChart
+      key="price-chart"
+      ticker={symbol}
+      initialData={market.price_history}
+      initialPeriod="1mo"
+      fillHeight
+    />
+  ) : null;
+
+  const bottomLeftChildren = [
+    market ? <FundamentalsGrid key="fundamentals" data={market.fundamentals} /> : null,
+    (
+      <div key="filings-panel" className="min-h-0">
+        <FilingsPanel filings={filings.filings} error={filingsError} fillHeight />
+      </div>
     ),
-    market ? (
-      <PriceChart
-        key="price-chart"
-        ticker={symbol}
-        initialData={market.price_history}
-        initialPeriod="1mo"
-      />
-    ) : null,
-    market ? (
-      <FundamentalsGrid key="fundamentals" data={market.fundamentals} />
-    ) : null,
-    <div key="research-panels" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-      <NewsFeed articles={news.articles} error={newsError} />
-      <FilingsPanel filings={filings.filings} error={filingsError} />
-    </div>,
   ];
+
+  const bottomLeftWidgets = (
+    <div className="grid h-[520px] min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6">
+      {bottomLeftChildren}
+    </div>
+  );
+
+  const bottomRightWidgets = (
+    <div className="h-[520px] min-h-0">
+      <NewsFeed articles={news.articles} error={newsError} fillHeight />
+    </div>
+  );
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafcff]">
@@ -156,7 +170,10 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
 
       <main className="relative z-10 mx-auto max-w-[1280px] px-6 py-8">
         <DashboardLayout
-          dataWidgets={dataWidgets}
+          topWidgets={topWidgets}
+          chartWidget={chartWidget}
+          bottomLeftWidgets={bottomLeftWidgets}
+          bottomRightWidgets={bottomRightWidgets}
           agentPanel={<AgentChat ticker={symbol} />}
         />
       </main>

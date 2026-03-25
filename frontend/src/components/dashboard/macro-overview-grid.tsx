@@ -101,7 +101,7 @@ export default function MacroOverviewGrid({
   country: MacroCountry;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-2 xl:grid-cols-5">
       {MACRO_CARDS[country].map((card) => {
         const indicator = card.getIndicator(snapshot);
         const delta = formatIndicatorDelta(indicator);
@@ -109,17 +109,17 @@ export default function MacroOverviewGrid({
         return (
           <Card
             key={card.slug}
-            className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] transition-colors hover:border-black/[0.12]"
+            className="flex h-full flex-col rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] transition-colors hover:border-black/[0.12]"
           >
-            <CardHeader>
+            <CardHeader className="pb-2">
               <div className="space-y-1">
                 <p className="text-sm font-light text-black/56">{card.label}</p>
-                <CardTitle className="text-2xl font-medium tracking-tight text-[#161616]">
+                <CardTitle className="text-[1.65rem] font-medium tracking-tight text-[#161616]">
                   {formatIndicatorValue(indicator)}
                 </CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="space-y-1.5">
+            <CardContent className="flex flex-1 flex-col justify-end space-y-1.5 pt-0">
               <p className="text-sm font-light text-black/62">{indicator.name}</p>
               <div className="flex items-center justify-between text-xs text-black/48">
                 <span>

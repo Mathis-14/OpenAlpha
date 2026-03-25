@@ -72,76 +72,79 @@ export default async function MacroPage({
       ? "The macro data provider is temporarily unavailable. Try again in a moment."
       : "Something went wrong loading macro data.";
 
-  const dataWidgets = [
+  const topWidgets = (
+    <>
+      <Card
+        key="macro-country-switch"
+        className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
+      >
+        <CardContent className="flex flex-col gap-2.5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-[#161616]">Country</p>
+            <p className="text-xs font-light text-black/58">
+              Switch the macro dashboard between the U.S. and France.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {COUNTRY_OPTIONS.map((option) => (
+              <Link
+                key={option.value}
+                href={option.value === "us" ? "/macro" : `/macro?country=${option.value}`}
+                className={`inline-flex h-9 items-center justify-center rounded-[10px] px-3.5 text-sm transition-colors ${
+                  country === option.value
+                    ? "bg-[#1080ff] text-white"
+                    : "border border-black/[0.08] bg-white text-black/62 hover:bg-[#f4f8ff] hover:text-[#161616]"
+                }`}
+              >
+                {option.label}
+              </Link>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {snapshot ? (
+        <MacroOverviewGrid key="macro-overview" snapshot={snapshot} country={country} />
+      ) : (
+        <Card
+          key="macro-overview-fallback"
+          className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
+        >
+          <CardHeader>
+            <CardTitle className="text-[#161616]">Macro snapshot</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm font-light text-black/64">{snapshotError}</p>
+          </CardContent>
+        </Card>
+      )}
+    </>
+  );
+
+  const chartWidget = initialSeries ? (
+    <MacroChart
+      key={`macro-chart-${country}`}
+      initialIndicator={initialSeries}
+      initialIndicatorSlug={DEFAULT_INDICATOR}
+      initialRange={DEFAULT_RANGE}
+      country={country}
+      fillHeight
+    />
+  ) : (
     <Card
-      key="macro-country-switch"
+      key="macro-chart-fallback"
       className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
     >
-      <CardContent className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <p className="text-sm font-medium text-[#161616]">Country</p>
-          <p className="text-sm font-light text-black/62">
-            Switch the macro dashboard between the U.S. and France.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {COUNTRY_OPTIONS.map((option) => (
-            <Link
-              key={option.value}
-              href={option.value === "us" ? "/macro" : `/macro?country=${option.value}`}
-              className={`inline-flex h-9 items-center justify-center rounded-[10px] px-3.5 text-sm transition-colors ${
-                country === option.value
-                  ? "bg-[#1080ff] text-white"
-                  : "border border-black/[0.08] bg-white text-black/62 hover:bg-[#f4f8ff] hover:text-[#161616]"
-              }`}
-            >
-              {option.label}
-            </Link>
-          ))}
-        </div>
+      <CardHeader>
+        <CardTitle className="text-[#161616]">Macro trends</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm font-light text-black/64">
+          Unable to load chart history right now.
+        </p>
       </CardContent>
-    </Card>,
-
-    snapshot ? (
-      <MacroOverviewGrid key="macro-overview" snapshot={snapshot} country={country} />
-    ) : (
-      <Card
-        key="macro-overview-fallback"
-        className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
-      >
-        <CardHeader>
-          <CardTitle className="text-[#161616]">Macro snapshot</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm font-light text-black/64">{snapshotError}</p>
-        </CardContent>
-      </Card>
-    ),
-
-    initialSeries ? (
-      <MacroChart
-        key={`macro-chart-${country}`}
-        initialIndicator={initialSeries}
-        initialIndicatorSlug={DEFAULT_INDICATOR}
-        initialRange={DEFAULT_RANGE}
-        country={country}
-      />
-    ) : (
-      <Card
-        key="macro-chart-fallback"
-        className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
-      >
-        <CardHeader>
-          <CardTitle className="text-[#161616]">Macro trends</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm font-light text-black/64">
-            Unable to load chart history right now.
-          </p>
-        </CardContent>
-      </Card>
-    ),
-  ];
+    </Card>
+  );
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafcff]">
@@ -185,7 +188,8 @@ export default async function MacroPage({
 
       <main className="relative z-10 mx-auto max-w-[1280px] px-6 py-8">
         <DashboardLayout
-          dataWidgets={dataWidgets}
+          topWidgets={topWidgets}
+          chartWidget={chartWidget}
           agentPanel={
             <AgentChat
               key={`macro-agent-${country}`}

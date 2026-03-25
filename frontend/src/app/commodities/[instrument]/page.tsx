@@ -67,64 +67,65 @@ export default async function CommodityInstrumentPage({
         ? "Commodity market data is temporarily unavailable. Try again in a moment."
         : "Something went wrong loading commodity market data.";
 
-  const dataWidgets = [
-    overview ? (
-      <CommodityOverviewGrid key="commodity-overview" overview={overview} />
-    ) : (
-      <Card
-        key="commodity-overview-error"
-        className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
-      >
-        <CardHeader>
-          <CardTitle className="text-[#161616]">{marketMeta.name}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm font-light text-black/64">{errorMessage}</p>
-        </CardContent>
-      </Card>
-    ),
-    overview ? (
-      <CommodityPriceChart
-        key="commodity-chart"
-        instrument={instrument}
-        initialData={initialHistory}
-        initialRange={DEFAULT_RANGE}
-      />
-    ) : null,
-    overview ? (
-      <Card
-        key="commodity-details"
-        className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
-      >
-        <CardHeader>
-          <CardTitle className="text-[#161616]">Instrument details</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <DetailStat label="Benchmark" value={marketMeta.name} />
-          <DetailStat
-            label="Category"
-            value={getCommodityCategoryLabel(marketMeta.category)}
-          />
-          <DetailStat label="Unit" value={marketMeta.unit_label} />
-          <DetailStat label="Exchange" value={overview.exchange_label} />
-          <DetailStat label="Source" value={overview.source_label} />
-          <DetailStat label="Provider symbol" value={overview.provider_symbol} />
-          <DetailStat
-            label="Session range"
-            value={`${formatValue(overview.day_low)} - ${formatValue(overview.day_high)}`}
-          />
-          <DetailStat
-            label="52W range"
-            value={`${formatValue(overview.fifty_two_week_low)} - ${formatValue(overview.fifty_two_week_high)}`}
-          />
-          <DetailStat
-            label="Market state"
-            value={overview.market_state ?? "—"}
-          />
-        </CardContent>
-      </Card>
-    ) : null,
-  ];
+  const topWidgets = overview ? (
+    <CommodityOverviewGrid key="commodity-overview" overview={overview} />
+  ) : (
+    <Card
+      key="commodity-overview-error"
+      className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
+    >
+      <CardHeader>
+        <CardTitle className="text-[#161616]">{marketMeta.name}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm font-light text-black/64">{errorMessage}</p>
+      </CardContent>
+    </Card>
+  );
+
+  const chartWidget = overview ? (
+    <CommodityPriceChart
+      key="commodity-chart"
+      instrument={instrument}
+      initialData={initialHistory}
+      initialRange={DEFAULT_RANGE}
+      fillHeight
+    />
+  ) : null;
+
+  const bottomWidgets = overview ? (
+    <Card
+      key="commodity-details"
+      className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
+    >
+      <CardHeader>
+        <CardTitle className="text-[#161616]">Instrument details</CardTitle>
+      </CardHeader>
+      <CardContent className="grid grid-cols-1 gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+        <DetailStat label="Benchmark" value={marketMeta.name} />
+        <DetailStat
+          label="Category"
+          value={getCommodityCategoryLabel(marketMeta.category)}
+        />
+        <DetailStat label="Unit" value={marketMeta.unit_label} />
+        <DetailStat label="Exchange" value={overview.exchange_label} />
+        <DetailStat label="Source" value={overview.source_label} />
+        <DetailStat label="Provider symbol" value={overview.provider_symbol} />
+        <DetailStat
+          label="Session range"
+          value={`${formatValue(overview.day_low)} - ${formatValue(overview.day_high)}`}
+        />
+        <DetailStat
+          label="52W range"
+          value={`${formatValue(overview.fifty_two_week_low)} - ${formatValue(overview.fifty_two_week_high)}`}
+        />
+        <DetailStat
+          label="Market state"
+          value={overview.market_state ?? "—"}
+        />
+      </CardContent>
+    </Card>
+  ) : null;
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafcff]">
@@ -168,7 +169,9 @@ export default async function CommodityInstrumentPage({
 
       <main className="relative z-10 mx-auto max-w-[1280px] px-6 py-8">
         <DashboardLayout
-          dataWidgets={dataWidgets}
+          topWidgets={topWidgets}
+          chartWidget={chartWidget}
+          bottomWidgets={bottomWidgets}
           agentPanel={
             <AgentChat
               key={`commodity-agent-${instrument}`}
