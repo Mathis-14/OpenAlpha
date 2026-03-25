@@ -1,3 +1,4 @@
+import type { CryptoInstrument } from "@/types/api";
 import { runAgent } from "@/server/agent/service";
 
 export const runtime = "nodejs";
@@ -9,6 +10,7 @@ type AgentRouteRequest = {
   ticker?: unknown;
   dashboard_context?: unknown;
   country?: unknown;
+  crypto_instrument?: unknown;
 };
 
 function normalizeRequest(body: AgentRouteRequest) {
@@ -17,11 +19,25 @@ function normalizeRequest(body: AgentRouteRequest) {
     return null;
   }
 
+  let cryptoInstrument: CryptoInstrument | undefined;
+  if (
+    body.crypto_instrument === "BTC-PERPETUAL" ||
+    body.crypto_instrument === "ETH-PERPETUAL"
+  ) {
+    cryptoInstrument = body.crypto_instrument;
+  }
+
   return {
     query,
     ticker: typeof body.ticker === "string" && body.ticker.trim() ? body.ticker.trim() : undefined,
-    dashboard_context: body.dashboard_context === "macro" ? "macro" as const : undefined,
+    dashboard_context:
+      body.dashboard_context === "macro"
+        ? ("macro" as const)
+        : body.dashboard_context === "crypto"
+          ? ("crypto" as const)
+          : undefined,
     country: body.country === "fr" ? "fr" as const : body.country === "us" ? "us" as const : undefined,
+    crypto_instrument: cryptoInstrument,
   };
 }
 
