@@ -1,11 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import type { Fundamentals } from "@/types/api";
-import { Info } from "lucide-react";
 
 function fmt(n: number | null, suffix = ""): string {
   if (n == null) return "—";
@@ -47,22 +41,14 @@ const METRICS: {
 export default function FundamentalsGrid({ data }: { data: Fundamentals }) {
   return (
     <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
-      <CardHeader>
+      <CardHeader className="pb-4">
         <CardTitle className="text-[#161616]">Fundamentals</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-0">
         <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
           {METRICS.map((m) => (
             <div key={m.key} className="group">
-              <Tooltip>
-                <TooltipTrigger className="inline-flex items-center gap-1 text-black/52">
-                  {m.label}
-                  <Info className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-60" />
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p className="max-w-[220px]">{m.tip}</p>
-                </TooltipContent>
-              </Tooltip>
+              <p className="text-black/52">{m.label}</p>
               <p className="font-medium tabular-nums text-[#161616]">{m.format(data[m.key])}</p>
             </div>
           ))}

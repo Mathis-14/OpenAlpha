@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import type { NewsArticle } from "@/types/api";
 import { AlertTriangle, ExternalLink } from "lucide-react";
 
@@ -17,17 +16,19 @@ function timeAgo(dateStr: string | null): string {
 export default function NewsFeed({
   articles,
   error,
+  fillHeight = false,
 }: {
   articles: NewsArticle[];
   error?: string | null;
+  fillHeight?: boolean;
 }) {
   if (error) {
     return (
-      <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
+      <Card className="flex h-full flex-col rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
         <CardHeader>
           <CardTitle className="text-[#161616]">News</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-1 items-start">
           <div className="flex items-start gap-2.5 text-sm text-[#b93828]">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <p>{error}</p>
@@ -39,11 +40,11 @@ export default function NewsFeed({
 
   if (articles.length === 0) {
     return (
-      <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
+      <Card className="flex h-full flex-col rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
         <CardHeader>
           <CardTitle className="text-[#161616]">News</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-1 items-start">
           <p className="text-sm font-light text-black/64">No news available.</p>
         </CardContent>
       </Card>
@@ -51,13 +52,13 @@ export default function NewsFeed({
   }
 
   return (
-    <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
+    <Card className="flex h-full flex-col rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
       <CardHeader>
         <CardTitle className="text-[#161616]">News</CardTitle>
       </CardHeader>
-      <CardContent>
-        <ScrollArea className="h-[400px]">
-          <ul className="divide-y divide-black/[0.06] pr-3">
+      <CardContent className="min-h-0 flex-1">
+        <div className={`${fillHeight ? "h-full min-h-0" : "h-[400px] min-h-0"} overflow-y-auto pr-3`}>
+          <ul className="divide-y divide-black/[0.06]">
             {articles.map((a, i) => (
               <li key={i} className="py-3 first:pt-0 last:pb-0">
                 <a
@@ -83,7 +84,7 @@ export default function NewsFeed({
               </li>
             ))}
           </ul>
-        </ScrollArea>
+        </div>
       </CardContent>
     </Card>
   );
