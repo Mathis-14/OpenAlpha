@@ -29,6 +29,7 @@ interface CommodityPriceChartProps {
   instrument: CommodityInstrumentSlug;
   initialData: PricePoint[];
   initialRange: CommodityRange;
+  fillHeight?: boolean;
 }
 
 function toChartTime(value: number): Time {
@@ -39,6 +40,7 @@ export default function CommodityPriceChart({
   instrument,
   initialData,
   initialRange,
+  fillHeight = false,
 }: CommodityPriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -104,10 +106,11 @@ export default function CommodityPriceChart({
       timeScale: {
         borderColor: "rgba(0,0,0,0.08)",
         timeVisible: range === "1d" || range === "5d",
+        minimumHeight: 28,
       },
       rightPriceScale: { borderColor: "rgba(0,0,0,0.08)" },
       width: el.clientWidth,
-      height: 400,
+      height: el.clientHeight || 320,
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
@@ -133,7 +136,10 @@ export default function CommodityPriceChart({
     chartRef.current = chart;
 
     const ro = new ResizeObserver(() => {
-      chart.applyOptions({ width: el.clientWidth });
+      chart.applyOptions({
+        width: el.clientWidth,
+        height: el.clientHeight || 320,
+      });
       fitChartToData(chart);
     });
     ro.observe(el);
@@ -146,7 +152,11 @@ export default function CommodityPriceChart({
   }, [data, range]);
 
   return (
-    <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
+    <Card
+      className={`overflow-visible rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] ${
+        fillHeight ? "flex h-full min-h-0 flex-col" : ""
+      }`}
+    >
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-[#161616]">Price</CardTitle>
@@ -167,14 +177,17 @@ export default function CommodityPriceChart({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="relative space-y-3">
+      <CardContent className={fillHeight ? "flex min-h-0 flex-1 flex-col pt-0 pb-3" : "pt-0 pb-3"}>
+        <div className={`relative space-y-3 ${fillHeight ? "flex min-h-0 flex-1 flex-col" : ""}`}>
           {loading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[14px] bg-white/85 backdrop-blur-sm">
               <span className="text-sm text-black/56">Loading...</span>
             </div>
           )}
-          <div ref={containerRef} className="h-[400px] w-full" />
+          <div
+            ref={containerRef}
+            className={fillHeight ? "min-h-[248px] flex-1 w-full" : "h-[320px] w-full"}
+          />
           {error && <p className="text-sm text-[#b93828]">{error}</p>}
         </div>
       </CardContent>

@@ -60,11 +60,13 @@ export default function MacroChart({
   initialIndicatorSlug,
   initialRange,
   country,
+  fillHeight = false,
 }: {
   initialIndicator: MacroIndicator;
   initialIndicatorSlug: MacroIndicatorSlug;
   initialRange: MacroHistoryRange;
   country: MacroCountry;
+  fillHeight?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -137,7 +139,7 @@ export default function MacroChart({
       timeScale: { borderColor: "rgba(0,0,0,0.08)" },
       rightPriceScale: { borderColor: "rgba(0,0,0,0.08)" },
       width: el.clientWidth,
-      height: 360,
+      height: el.clientHeight || 300,
     });
 
     const series = chart.addSeries(AreaSeries, {
@@ -158,7 +160,10 @@ export default function MacroChart({
     chartRef.current = chart;
 
     const resizeObserver = new ResizeObserver(() => {
-      chart.applyOptions({ width: el.clientWidth });
+      chart.applyOptions({
+        width: el.clientWidth,
+        height: el.clientHeight || 300,
+      });
       fitChartToData(chart);
     });
     resizeObserver.observe(el);
@@ -171,8 +176,12 @@ export default function MacroChart({
   }, [data]);
 
   return (
-    <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
-      <CardHeader className="space-y-4">
+    <Card
+      className={`rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] ${
+        fillHeight ? "flex h-full min-h-0 flex-col" : ""
+      }`}
+    >
+      <CardHeader className="space-y-3 pb-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-1">
             <CardTitle className="text-[#161616]">Macro trends</CardTitle>
@@ -215,14 +224,17 @@ export default function MacroChart({
           ))}
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="relative">
+      <CardContent className={fillHeight ? "flex min-h-0 flex-1 flex-col space-y-3 pt-0" : "space-y-3 pt-0"}>
+        <div className={`relative ${fillHeight ? "min-h-0 flex-1" : ""}`}>
           {loading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[14px] bg-white/80 backdrop-blur-sm">
               <span className="text-sm text-black/56">Loading chart…</span>
             </div>
           )}
-          <div ref={containerRef} className="h-[360px] w-full" />
+          <div
+            ref={containerRef}
+            className={fillHeight ? "min-h-[220px] h-full w-full" : "h-[300px] w-full"}
+          />
         </div>
 
         <div className="flex flex-col gap-1 text-xs text-black/48 sm:flex-row sm:items-center sm:justify-between">

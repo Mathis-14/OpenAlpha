@@ -47,9 +47,9 @@ export default function CryptoOverviewGrid({
   const marketMeta = getCryptoMarketMeta(overview.instrument);
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] transition-colors hover:border-black/[0.12]">
-        <CardHeader>
+    <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <Card className="flex h-full flex-col rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] transition-colors hover:border-black/[0.12]">
+        <CardHeader className="pb-2">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-2">
               <div className="flex items-center gap-3">
@@ -69,7 +69,7 @@ export default function CryptoOverviewGrid({
                   </p>
                 </div>
               </div>
-              <CardTitle className="text-2xl font-medium tracking-tight text-[#161616]">
+              <CardTitle className="text-[1.65rem] font-medium tracking-tight text-[#161616]">
                 {formatCurrency(overview.last_price)}
               </CardTitle>
             </div>
@@ -86,7 +86,7 @@ export default function CryptoOverviewGrid({
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="space-y-1.5">
+        <CardContent className="flex flex-1 flex-col justify-end space-y-1.5 pt-0">
           <p className="text-sm font-light text-black/62">
             {marketMeta.name} perpetual on Deribit
           </p>
@@ -143,16 +143,16 @@ function MetricCard({
   meta: string;
 }) {
   return (
-    <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] transition-colors hover:border-black/[0.12]">
-      <CardHeader>
+    <Card className="flex h-full flex-col rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] transition-colors hover:border-black/[0.12]">
+      <CardHeader className="pb-2">
         <div className="space-y-1">
           <p className="text-sm font-light text-black/56">{label}</p>
-          <CardTitle className="text-2xl font-medium tracking-tight text-[#161616]">
+          <CardTitle className="text-[1.6rem] font-medium tracking-tight text-[#161616]">
             {value}
           </CardTitle>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex flex-1 items-end pt-0">
         <p className="text-sm font-light leading-6 text-black/62">{meta}</p>
       </CardContent>
     </Card>
