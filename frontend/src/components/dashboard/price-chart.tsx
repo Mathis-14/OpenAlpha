@@ -6,6 +6,8 @@ import {
   ColorType,
   CandlestickSeries,
   type IChartApi,
+  type Time,
+  type UTCTimestamp,
 } from "lightweight-charts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { PricePoint, PeriodType } from "@/types/api";
@@ -27,6 +29,23 @@ interface PriceChartProps {
   initialPeriod: PeriodType;
 }
 
+function toChartTime(value: string | number): Time {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value as UTCTimestamp;
+  }
+
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  const timestamp = typeof value === "string" ? Date.parse(value) : Number.NaN;
+  if (Number.isFinite(timestamp)) {
+    return Math.floor(timestamp / 1000) as UTCTimestamp;
+  }
+
+  throw new Error(`Invalid chart date: ${value}`);
+}
+
 export default function PriceChart({
   ticker,
   initialData,
@@ -39,6 +58,7 @@ export default function PriceChart({
     [initialPeriod]: initialData,
   });
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const data = cache[period] ?? initialData;
 
@@ -49,14 +69,21 @@ export default function PriceChart({
   }
 
   async function handlePeriodChange(newPeriod: PeriodType) {
-    setPeriod(newPeriod);
-    if (cache[newPeriod]) return;
+    if (newPeriod === period) return;
+    if (cache[newPeriod]) {
+      setError(null);
+      setPeriod(newPeriod);
+      return;
+    }
+
     setLoading(true);
+    setError(null);
     try {
       const d = await getPriceHistory(ticker, newPeriod);
       setCache((prev) => ({ ...prev, [newPeriod]: d }));
+      setPeriod(newPeriod);
     } catch {
-      /* keep showing previous data */
+      setError("Unable to refresh price history right now.");
     } finally {
       setLoading(false);
     }
@@ -100,7 +127,7 @@ export default function PriceChart({
 
     candleSeries.setData(
       data.map((p) => ({
-        time: p.date,
+        time: toChartTime(p.date),
         open: p.open,
         high: p.high,
         low: p.low,
@@ -148,13 +175,14 @@ export default function PriceChart({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="relative">
+        <div className="relative space-y-3">
           {loading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[14px] bg-white/85 backdrop-blur-sm">
               <span className="text-sm text-black/56">Loading...</span>
             </div>
           )}
           <div ref={containerRef} className="h-[400px] w-full" />
+          {error && <p className="text-sm text-[#b93828]">{error}</p>}
         </div>
       </CardContent>
     </Card>

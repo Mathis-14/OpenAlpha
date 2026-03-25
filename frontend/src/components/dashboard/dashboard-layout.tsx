@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { Children, type ReactNode } from "react";
 
 interface DashboardLayoutProps {
   dataWidgets: ReactNode;
@@ -11,11 +11,13 @@ export default function DashboardLayout({
   dataWidgets,
   agentPanel,
 }: DashboardLayoutProps) {
+  const widgetList = Children.toArray(dataWidgets);
+
   return (
     <>
       <div className="hidden xl:block">
         <div className="flex items-start gap-6">
-          <div className="min-w-0 flex-1 space-y-6">{dataWidgets}</div>
+          <div className="min-w-0 flex-1 space-y-6">{widgetList}</div>
 
           <aside className="w-[360px] shrink-0 2xl:w-[380px]">
             <div className="sticky top-24">
@@ -28,7 +30,7 @@ export default function DashboardLayout({
       </div>
 
       <div className="space-y-6 xl:hidden">
-        {dataWidgets}
+        {widgetList}
         {agentPanel}
       </div>
     </>

@@ -12,7 +12,7 @@ export type PeriodType =
   | "max";
 
 export interface PricePoint {
-  date: string;
+  date: number;
   open: number;
   high: number;
   low: number;

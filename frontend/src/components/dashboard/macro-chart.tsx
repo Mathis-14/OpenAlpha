@@ -91,11 +91,10 @@ export default function MacroChart({
     nextRange: MacroHistoryRange,
   ) {
     const nextKey = `${nextIndicator}:${nextRange}`;
-    setIndicator(nextIndicator);
-    setRange(nextRange);
-    setError(null);
-
     if (cache[nextKey]) {
+      setError(null);
+      setIndicator(nextIndicator);
+      setRange(nextRange);
       return;
     }
 
@@ -103,6 +102,9 @@ export default function MacroChart({
     try {
       const result = await getMacroSeries(nextIndicator, nextRange, country);
       setCache((prev) => ({ ...prev, [nextKey]: result }));
+      setIndicator(nextIndicator);
+      setRange(nextRange);
+      setError(null);
     } catch {
       setError("Unable to refresh chart data right now.");
     } finally {

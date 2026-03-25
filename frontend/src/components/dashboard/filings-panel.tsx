@@ -8,9 +8,31 @@ import {
 } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Filing } from "@/types/api";
-import { ChevronRight, ExternalLink, FileText } from "lucide-react";
+import { AlertTriangle, ChevronRight, ExternalLink, FileText } from "lucide-react";
 
-export default function FilingsPanel({ filings }: { filings: Filing[] }) {
+export default function FilingsPanel({
+  filings,
+  error,
+}: {
+  filings: Filing[];
+  error?: string | null;
+}) {
+  if (error) {
+    return (
+      <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
+        <CardHeader>
+          <CardTitle className="text-[#161616]">SEC Filings</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-start gap-2.5 text-sm text-[#b93828]">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>{error}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (filings.length === 0) {
     return (
       <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
