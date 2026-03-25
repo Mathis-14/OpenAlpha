@@ -6,7 +6,8 @@ import AgentAlphaIcon from "@/components/agent-alpha-icon";
 import MarkdownMessage from "@/components/markdown-message";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { streamAgent, type AgentSSE } from "@/lib/api";
-import type { MacroCountry } from "@/types/api";
+import { getCryptoMarketMeta } from "@/lib/crypto";
+import type { CryptoInstrument, MacroCountry } from "@/types/api";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -73,6 +74,7 @@ interface AgentChatProps {
   variant?: "dashboard" | "landing";
   autoFocusInput?: boolean;
   macroCountry?: MacroCountry;
+  cryptoInstrument?: CryptoInstrument;
 }
 
 const TICKER_SUGGESTIONS = [
@@ -110,11 +112,25 @@ const MACRO_SUGGESTIONS: Record<MacroCountry, string[]> = {
   ],
 };
 
+const CRYPTO_SUGGESTIONS: Record<CryptoInstrument, string[]> = {
+  "BTC-PERPETUAL": [
+    "What's the current BTC perpetual trend?",
+    "How do mark price and index price compare right now?",
+    "What do open interest and funding say about positioning?",
+  ],
+  "ETH-PERPETUAL": [
+    "What's the current ETH perpetual trend?",
+    "How do mark price and index price compare right now?",
+    "What do open interest and funding say about positioning?",
+  ],
+};
+
 export default function AgentChat({
   ticker,
   variant = "dashboard",
   autoFocusInput = false,
   macroCountry,
+  cryptoInstrument,
 }: AgentChatProps) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -126,6 +142,9 @@ export default function AgentChat({
   const isLanding = variant === "landing";
   const landingCompactEmpty = isLanding && messages.length === 0 && !streaming;
   const landingHasConversation = isLanding && (messages.length > 0 || streaming);
+  const cryptoMeta = cryptoInstrument
+    ? getCryptoMarketMeta(cryptoInstrument)
+    : null;
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -160,8 +179,9 @@ export default function AgentChat({
         {
           query: query.trim(),
           ticker,
-          dashboard_context: macroCountry ? "macro" : undefined,
+          dashboard_context: cryptoInstrument ? "crypto" : macroCountry ? "macro" : undefined,
           country: macroCountry,
+          crypto_instrument: cryptoInstrument,
         },
         controller.signal,
       )) {
@@ -229,6 +249,8 @@ export default function AgentChat({
 
   const suggestions = ticker
     ? TICKER_SUGGESTIONS
+    : cryptoInstrument
+      ? CRYPTO_SUGGESTIONS[cryptoInstrument]
     : macroCountry
       ? MACRO_SUGGESTIONS[macroCountry]
       : isLanding
@@ -238,6 +260,8 @@ export default function AgentChat({
 
   const placeholderText = ticker
     ? `Ask about ${ticker}...`
+    : cryptoInstrument
+      ? `Ask about ${cryptoMeta?.symbol ?? cryptoInstrument}...`
     : macroCountry
       ? `Ask about ${macroCountry === "fr" ? "France" : "U.S."} macro data...`
       : "Ask about any stock or market...";
@@ -250,6 +274,8 @@ export default function AgentChat({
       </span>
       . The agent will fetch real data before answering.
     </>
+  ) : cryptoInstrument && cryptoMeta ? (
+    `Ask about ${cryptoMeta.name}. Alpha will use live Deribit market data from this ${cryptoMeta.detailLabel.toLowerCase()} dashboard before answering.`
   ) : macroCountry ? (
     `Ask about ${
       macroCountry === "fr" ? "France" : "U.S."
@@ -288,7 +314,7 @@ export default function AgentChat({
                 Ask Alpha
               </CardTitle>
               <p className="mx-auto max-w-[48rem] text-sm leading-6 font-light text-black/68 sm:text-[15px]">
-                Ask about stocks, macro trends, or economic signals, then open a stock dashboard when you need to go deeper.
+                Ask about stocks, macro trends, or supported crypto markets, then open a dedicated dashboard when you need to go deeper.
               </p>
             </div>
           </div>
@@ -299,7 +325,9 @@ export default function AgentChat({
               Alpha
             </CardTitle>
             <p className="text-sm font-light text-black/62">
-              {macroCountry
+              {cryptoInstrument && cryptoMeta
+                ? `Ask about ${cryptoMeta.symbol}. Alpha will stay grounded in Deribit market data from this ${cryptoMeta.detailLabel.toLowerCase()} dashboard.`
+                : macroCountry
                 ? `Ask about ${macroCountry === "fr" ? "France" : "U.S."} macro data. Alpha will use the dashboard context before answering.`
                 : `Ask about ${ticker}. Alpha will pull live data before answering.`}
             </p>
@@ -379,6 +407,7 @@ export default function AgentChat({
               onOpenMacro={(country) =>
                 router.push(country === "fr" ? "/macro?country=fr" : "/macro")
               }
+              onOpenCrypto={(instrument) => router.push(`/crypto/${instrument}`)}
             />
           ))}
         </div>
@@ -508,6 +537,43 @@ function getSuggestedTicker(entries: ChatEntry[]): string | null {
   return symbols.length === 1 ? symbols[0] : null;
 }
 
+function getSuggestedCryptoInstrument(
+  entries: ChatEntry[],
+): CryptoInstrument | null {
+  const instruments = Array.from(
+    new Set(
+      entries.flatMap((entry) => {
+        if (
+          entry.type !== "tool_call" ||
+          (entry.name !== "get_crypto_overview" &&
+            entry.name !== "get_crypto_price_history")
+        ) {
+          return [];
+        }
+
+        const candidate = entry.arguments.instrument;
+        if (candidate === "BTC-PERPETUAL" || candidate === "ETH-PERPETUAL") {
+          return [candidate];
+        }
+
+        if (candidate === "BTC" || candidate === "BITCOIN") {
+          return ["BTC-PERPETUAL"];
+        }
+
+        if (candidate === "ETH" || candidate === "ETHEREUM") {
+          return ["ETH-PERPETUAL"];
+        }
+
+        return [];
+      }),
+    ),
+  );
+
+  return instruments.length === 1
+    ? (instruments[0] as CryptoInstrument)
+    : null;
+}
+
 function getSuggestedMacroCountry(entries: ChatEntry[]): MacroCountry | null {
   const macroCalls = entries.filter(
     (entry): entry is ToolCallEntry =>
@@ -543,12 +609,14 @@ function MessageBubble({
   variant,
   onOpenTicker,
   onOpenMacro,
+  onOpenCrypto,
 }: {
   message: ChatMessage;
   streaming: boolean;
   variant: "dashboard" | "landing";
   onOpenTicker: (ticker: string) => void;
   onOpenMacro: (country: MacroCountry) => void;
+  onOpenCrypto: (instrument: CryptoInstrument) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -583,8 +651,12 @@ function MessageBubble({
   );
   const suggestedTicker =
     variant === "landing" ? getSuggestedTicker(entries) : null;
-  const suggestedMacroCountry =
+  const suggestedCryptoInstrument =
     variant === "landing" && !suggestedTicker
+      ? getSuggestedCryptoInstrument(entries)
+      : null;
+  const suggestedMacroCountry =
+    variant === "landing" && !suggestedTicker && !suggestedCryptoInstrument
       ? getSuggestedMacroCountry(entries)
       : null;
 
@@ -603,6 +675,14 @@ function MessageBubble({
           symbol={suggestedTicker}
           variant={variant}
           onOpen={() => onOpenTicker(suggestedTicker)}
+        />
+      )}
+
+      {suggestedCryptoInstrument && (
+        <CryptoDashboardSuggestionCard
+          instrument={suggestedCryptoInstrument}
+          variant={variant}
+          onOpen={() => onOpenCrypto(suggestedCryptoInstrument)}
         />
       )}
 
@@ -665,6 +745,59 @@ function MessageBubble({
           {toolEntries.length > 0 ? "Processing..." : "Thinking..."}
         </div>
       )}
+    </div>
+  );
+}
+
+function CryptoDashboardSuggestionCard({
+  instrument,
+  onOpen,
+  variant,
+}: {
+  instrument: CryptoInstrument;
+  onOpen: () => void;
+  variant: "dashboard" | "landing";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-[14px] p-3 text-left",
+        variant === "landing" || variant === "dashboard"
+          ? "border border-black/[0.08] bg-[#f4f8ff]"
+          : "border border-white/[0.08] bg-white/[0.03]",
+      )}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <p
+            className={cn(
+              "inline-flex items-center gap-2 text-[11px] font-normal uppercase tracking-[0.2em]",
+              variant === "landing" || variant === "dashboard" ? "text-black/54" : "text-white/52",
+            )}
+          >
+            <LayoutDashboard className="h-3.5 w-3.5" />
+            Crypto Dashboard Ready
+          </p>
+          <p className={cn("text-sm", variant === "landing" || variant === "dashboard" ? "text-black/76" : "text-white/78")}>
+            Open <span className="font-mono font-semibold">{instrument}</span> for
+            Deribit price action, open interest, funding context, and a dedicated
+            crypto agent.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className={cn(
+            "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[10px] px-4 text-sm font-medium transition-colors",
+            variant === "landing" || variant === "dashboard"
+              ? "border border-black/[0.08] bg-[#1080ff] text-white hover:bg-[#006fe6]"
+              : "border border-white/[0.1] bg-white text-black hover:bg-white/92",
+          )}
+        >
+          Open {instrument}
+          <ArrowUpRight className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }

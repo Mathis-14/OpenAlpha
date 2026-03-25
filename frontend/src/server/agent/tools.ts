@@ -1,9 +1,18 @@
 import type {
+  CryptoInstrument,
+  CryptoOverview,
+  CryptoRange,
   MacroCountry,
   MacroIndicator,
   PeriodType,
   PricePoint,
 } from "@/types/api";
+import {
+  coerceCryptoInstrument,
+  getCryptoOverview,
+  getCryptoPriceHistory,
+  parseCryptoRange,
+} from "@/server/crypto/service";
 import { getFilings } from "@/server/filings/service";
 import { getMacroSnapshotForCountry } from "@/server/macro/service";
 import {
@@ -55,6 +64,14 @@ const HISTORY_PERIODS = new Set<PeriodType>([
   "max",
 ]);
 
+function normalizeCryptoInstrument(value: unknown): CryptoInstrument {
+  return coerceCryptoInstrument(value) ?? "BTC-PERPETUAL";
+}
+
+function normalizeCryptoRange(value: unknown): CryptoRange {
+  return parseCryptoRange(typeof value === "string" ? value : null);
+}
+
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: "function",
@@ -71,6 +88,49 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
           },
         },
         required: ["symbol"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_crypto_overview",
+      description:
+        "Get live Deribit market data for a supported crypto perpetual. Supported instruments are BTC-PERPETUAL and ETH-PERPETUAL only.",
+      parameters: {
+        type: "object",
+        properties: {
+          instrument: {
+            type: "string",
+            enum: ["BTC-PERPETUAL", "ETH-PERPETUAL"],
+            description: "Supported Deribit perpetual instrument",
+          },
+        },
+        required: ["instrument"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_crypto_price_history",
+      description:
+        "Get Deribit OHLCV history for BTC-PERPETUAL or ETH-PERPETUAL over a specific range.",
+      parameters: {
+        type: "object",
+        properties: {
+          instrument: {
+            type: "string",
+            enum: ["BTC-PERPETUAL", "ETH-PERPETUAL"],
+            description: "Supported Deribit perpetual instrument",
+          },
+          range: {
+            type: "string",
+            enum: ["1d", "1w", "1mo", "3mo", "1y", "max"],
+            description: "Time range for crypto price history (default: 1mo)",
+          },
+        },
+        required: ["instrument"],
       },
     },
   },
@@ -229,6 +289,29 @@ function truncateHistory(points: PricePoint[]): { price_history: PricePoint[]; _
   };
 }
 
+function buildCryptoMetrics(
+  overview: CryptoOverview,
+): Array<{ label: string; value: string }> {
+  return [
+    { label: overview.instrument, value: `$${overview.last_price.toFixed(2)}` },
+    {
+      label: "24H Change",
+      value:
+        overview.change_24h == null
+          ? "—"
+          : `${overview.change_24h >= 0 ? "+" : ""}${overview.change_24h.toFixed(2)}%`,
+    },
+    {
+      label: "Open Interest",
+      value: compactNumber(overview.open_interest),
+    },
+    {
+      label: "Mark Price",
+      value: `$${overview.mark_price.toFixed(2)}`,
+    },
+  ];
+}
+
 function truncateFilings<T extends { filings?: Array<{ sections?: Array<{ content?: string }> }> }>(
   data: T,
 ): T {
@@ -345,6 +428,36 @@ export async function dispatchToolWithDisplay(
               value: formatIndicatorValue(snapshot.unemployment, 1),
             },
           ],
+        },
+      },
+    ];
+  } else if (name === "get_crypto_overview") {
+    const instrument = normalizeCryptoInstrument(argumentsObject.instrument);
+    const overview = await getCryptoOverview(instrument);
+    result = overview;
+    displays = [
+      {
+        type: "display_metric",
+        data: {
+          metrics: buildCryptoMetrics(overview),
+        },
+      },
+    ];
+  } else if (name === "get_crypto_price_history") {
+    const instrument = normalizeCryptoInstrument(argumentsObject.instrument);
+    const range = normalizeCryptoRange(argumentsObject.range);
+    const history = await getCryptoPriceHistory(instrument, range);
+    result = truncateHistory(history);
+    displays = [
+      {
+        type: "display_chart",
+        data: {
+          symbol: instrument,
+          period: range,
+          points: history.slice(-60).map((point) => ({
+            date: point.date,
+            close: point.close,
+          })),
         },
       },
     ];

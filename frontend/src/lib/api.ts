@@ -1,6 +1,10 @@
 import type {
   AgentRequest,
   AgentEvent,
+  CryptoDiscoveryItem,
+  CryptoInstrument,
+  CryptoOverview,
+  CryptoRange,
   FilingsResponse,
   Fundamentals,
   MacroCountry,
@@ -72,6 +76,27 @@ export function getMacroSeries(
   country: MacroCountry = "us",
 ): Promise<MacroIndicator> {
   return fetchJson(`/api/macro/series/${indicator}?range=${range}&country=${country}`);
+}
+
+// ── Crypto ──────────────────────────────────────────────────────────────────
+
+export function getCryptoInstruments(): Promise<CryptoDiscoveryItem[]> {
+  return fetchJson("/api/crypto/instruments");
+}
+
+export function getCryptoOverview(
+  instrument: CryptoInstrument,
+): Promise<CryptoOverview> {
+  return fetchJson(`/api/crypto/${encodeURIComponent(instrument)}`);
+}
+
+export function getCryptoPriceHistory(
+  instrument: CryptoInstrument,
+  range: CryptoRange = "1mo",
+): Promise<PricePoint[]> {
+  return fetchJson(
+    `/api/crypto/${encodeURIComponent(instrument)}/history?range=${range}`,
+  );
 }
 
 // ── Filings ─────────────────────────────────────────────────────────────────
