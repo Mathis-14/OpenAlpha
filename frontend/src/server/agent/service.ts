@@ -3,8 +3,15 @@ import type {
   CryptoInstrument,
   MacroCountry,
 } from "@/types/api";
+import { isCommodityInstrument } from "@/lib/commodities";
+import { buildDataPageHref, getDisplayAssetName } from "@/lib/data-export";
+import { coerceCryptoInstrument } from "@/server/crypto/service";
 import { SYSTEM_PROMPT } from "@/server/agent/prompt";
-import { TOOL_DEFINITIONS, dispatchToolWithDisplay } from "@/server/agent/tools";
+import {
+  normalizeSuggestedDataExportArgs,
+  TOOL_DEFINITIONS,
+  dispatchToolWithDisplay,
+} from "@/server/agent/tools";
 
 const MISTRAL_CHAT_URL = "https://api.mistral.ai/v1/chat/completions";
 const MAX_TOOL_ROUNDS = 10;
@@ -17,7 +24,7 @@ const TOOL_REQUIRED_MESSAGE =
 type AgentRequest = {
   query: string;
   ticker?: string | null;
-  dashboard_context?: "macro" | "crypto" | "commodity" | null;
+  dashboard_context?: "macro" | "crypto" | "commodity" | "data" | null;
   country?: MacroCountry | null;
   crypto_instrument?: CryptoInstrument | null;
   commodity_instrument?: CommodityInstrumentSlug | null;
@@ -78,7 +85,7 @@ function getMistralModel(): string {
 function buildUserContent(
   query: string,
   ticker: string | null | undefined,
-  dashboardContext: "macro" | "crypto" | "commodity" | null | undefined,
+  dashboardContext: "macro" | "crypto" | "commodity" | "data" | null | undefined,
   country: MacroCountry | null | undefined,
   cryptoInstrument: CryptoInstrument | null | undefined,
   commodityInstrument: CommodityInstrumentSlug | null | undefined,
@@ -115,6 +122,16 @@ function buildUserContent(
       `[Context: the user is on the macro dashboard for ${countryLabel}. ` +
       `Use get_macro_snapshot with country='${normalizedCountry}' and keep the answer ` +
       "grounded in that country unless the user asks to compare or switch countries.]"
+    );
+  }
+
+  if (dashboardContext === "data") {
+    return (
+      `${query}\n\n` +
+      "[Context: the user is on the Get the data page. Help them map their project to one supported raw CSV export at a time. " +
+      "Use suggest_data_export when you have a concrete recommendation. " +
+      "Prefer a single asset export, a clear date window, and a short note about why that export fits. " +
+      "Do not promise filings, news, fundamentals, or bulk multi-asset exports from this tool.]"
     );
   }
 
@@ -307,6 +324,225 @@ function parseToolArguments(raw: string): Record<string, unknown> {
   }
 }
 
+function wantsDownload(query: string): boolean {
+  return /\b(csv|download|export|raw data|dataset|data file)\b/i.test(query);
+}
+
+function buildDownloadSuggestion(
+  request: AgentRequest,
+  toolCalls: Array<{ name: string; args: Record<string, unknown> }>,
+): { href: string; label: string; description: string } | null {
+  const assistantReady = request.dashboard_context === "data";
+  const downloadLabel =
+    assistantReady
+      ? "Get the data with details"
+      : "Get the data";
+
+  const suggestedExports = toolCalls
+    .filter((toolCall) => toolCall.name === "suggest_data_export")
+    .flatMap((toolCall) => {
+      try {
+        return [normalizeSuggestedDataExportArgs(toolCall.args)];
+      } catch {
+        return [];
+      }
+    });
+
+  if (suggestedExports.length === 1) {
+    const plan = suggestedExports[0];
+    const href = buildDataPageHref({
+      asset_class: plan.asset_class,
+      asset: plan.asset,
+      country: plan.country,
+      start_date: plan.start_date,
+      end_date: plan.end_date,
+      assistant_ready: assistantReady,
+    });
+    const description = plan.reason
+      ? `${plan.reason} Prefilled for ${getDisplayAssetName(plan.asset_class, plan.asset, plan.country)} from ${plan.start_date} to ${plan.end_date}.`
+      : `Open the raw CSV export tool prefilled for ${getDisplayAssetName(plan.asset_class, plan.asset, plan.country)} from ${plan.start_date} to ${plan.end_date}.`;
+
+    return {
+      href,
+      label: downloadLabel,
+      description,
+    };
+  }
+
+  if (request.ticker) {
+    const symbol = request.ticker.trim().toUpperCase();
+    return {
+      href: buildDataPageHref({
+        asset_class: "stock",
+        asset: symbol,
+        assistant_ready: assistantReady,
+      }),
+      label: downloadLabel,
+      description: `Open the raw CSV export tool prefilled for ${symbol}.`,
+    };
+  }
+
+  if (request.dashboard_context === "commodity" && request.commodity_instrument) {
+    return {
+      href: buildDataPageHref({
+        asset_class: "commodity",
+        asset: request.commodity_instrument,
+        assistant_ready: assistantReady,
+      }),
+      label: downloadLabel,
+      description: `Open the raw CSV export tool prefilled for ${getDisplayAssetName("commodity", request.commodity_instrument)}.`,
+    };
+  }
+
+  if (request.dashboard_context === "crypto" && request.crypto_instrument) {
+    return {
+      href: buildDataPageHref({
+        asset_class: "crypto",
+        asset: request.crypto_instrument,
+        assistant_ready: assistantReady,
+      }),
+      label: downloadLabel,
+      description: `Open the raw CSV export tool prefilled for ${getDisplayAssetName("crypto", request.crypto_instrument)}.`,
+    };
+  }
+
+  if (request.dashboard_context === "macro") {
+    const country = request.country === "fr" ? "fr" : "us";
+    return {
+      href: buildDataPageHref({
+        asset_class: "macro",
+        asset: "fed-funds",
+        country,
+        assistant_ready: assistantReady,
+      }),
+      label: downloadLabel,
+      description: `Open the raw CSV export tool prefilled for ${getDisplayAssetName("macro", "fed-funds", country)}.`,
+    };
+  }
+
+  const stockSymbols = new Set<string>();
+  const macroCountries = new Set<MacroCountry>();
+  const cryptoInstruments = new Set<CryptoInstrument>();
+  const commodityInstruments = new Set<CommodityInstrumentSlug>();
+
+  for (const toolCall of toolCalls) {
+    if (
+      toolCall.name === "get_stock_overview" ||
+      toolCall.name === "get_stock_fundamentals" ||
+      toolCall.name === "get_price_history" ||
+      toolCall.name === "get_news" ||
+      toolCall.name === "get_sec_filings"
+    ) {
+      const candidate = toolCall.args.symbol ?? toolCall.args.ticker;
+      if (typeof candidate === "string" && candidate.trim()) {
+        stockSymbols.add(candidate.trim().toUpperCase());
+      }
+      continue;
+    }
+
+    if (toolCall.name === "get_macro_snapshot") {
+      const candidate = toolCall.args.country;
+      if (candidate === "fr" || candidate === "us") {
+        macroCountries.add(candidate);
+      } else {
+        macroCountries.add("us");
+      }
+      continue;
+    }
+
+    if (
+      toolCall.name === "get_crypto_overview" ||
+      toolCall.name === "get_crypto_price_history"
+    ) {
+      const normalized = coerceCryptoInstrument(toolCall.args.instrument);
+      if (normalized) {
+        cryptoInstruments.add(normalized);
+      }
+      continue;
+    }
+
+    if (
+      toolCall.name === "get_commodity_overview" ||
+      toolCall.name === "get_commodity_price_history"
+    ) {
+      const candidate = toolCall.args.instrument;
+      if (
+        typeof candidate === "string" &&
+        isCommodityInstrument(candidate.trim().toLowerCase())
+      ) {
+        commodityInstruments.add(
+          candidate.trim().toLowerCase() as CommodityInstrumentSlug,
+        );
+      }
+    }
+  }
+
+  const signalCount =
+    Number(stockSymbols.size > 0) +
+    Number(macroCountries.size > 0) +
+    Number(cryptoInstruments.size > 0) +
+    Number(commodityInstruments.size > 0);
+
+  if (signalCount !== 1) {
+    return null;
+  }
+
+  if (stockSymbols.size === 1) {
+    const symbol = Array.from(stockSymbols)[0];
+    return {
+      href: buildDataPageHref({
+        asset_class: "stock",
+        asset: symbol,
+        assistant_ready: assistantReady,
+      }),
+      label: downloadLabel,
+      description: `Open the raw CSV export tool prefilled for ${symbol}.`,
+    };
+  }
+
+  if (macroCountries.size === 1) {
+    const country = Array.from(macroCountries)[0];
+    return {
+      href: buildDataPageHref({
+        asset_class: "macro",
+        asset: "fed-funds",
+        country,
+        assistant_ready: assistantReady,
+      }),
+      label: downloadLabel,
+      description: `Open the raw CSV export tool prefilled for ${getDisplayAssetName("macro", "fed-funds", country)}.`,
+    };
+  }
+
+  if (cryptoInstruments.size === 1) {
+    const instrument = Array.from(cryptoInstruments)[0];
+    return {
+      href: buildDataPageHref({
+        asset_class: "crypto",
+        asset: instrument,
+        assistant_ready: assistantReady,
+      }),
+      label: downloadLabel,
+      description: `Open the raw CSV export tool prefilled for ${getDisplayAssetName("crypto", instrument)}.`,
+    };
+  }
+
+  if (commodityInstruments.size === 1) {
+    const instrument = Array.from(commodityInstruments)[0];
+    return {
+      href: buildDataPageHref({
+        asset_class: "commodity",
+        asset: instrument,
+        assistant_ready: assistantReady,
+      }),
+      label: downloadLabel,
+      description: `Open the raw CSV export tool prefilled for ${getDisplayAssetName("commodity", instrument)}.`,
+    };
+  }
+
+  return null;
+}
+
 export async function* runAgent(
   request: AgentRequest,
 ): AsyncGenerator<string, void, void> {
@@ -332,6 +568,10 @@ export async function* runAgent(
   ];
 
   let anyToolCalled = false;
+  const observedToolCalls: Array<{
+    name: string;
+    args: Record<string, unknown>;
+  }> = [];
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     let completion: CompletionResponse;
@@ -364,6 +604,13 @@ export async function* runAgent(
         continue;
       }
 
+      if (request.dashboard_context === "data" || wantsDownload(request.query)) {
+        const suggestion = buildDownloadSuggestion(request, observedToolCalls);
+        if (suggestion) {
+          yield sse("display_download", suggestion);
+        }
+      }
+
       try {
         for await (const text of streamCompletion(messages)) {
           yield sse("text_delta", { content: text });
@@ -388,6 +635,7 @@ export async function* runAgent(
     for (const toolCall of toolCalls) {
       const name = toolCall.function.name;
       const args = parseToolArguments(toolCall.function.arguments);
+      observedToolCalls.push({ name, args });
 
       yield sse("tool_call", { name, arguments: args });
 
