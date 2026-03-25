@@ -7,11 +7,13 @@ import AgentChat from "@/components/dashboard/agent-chat";
 import CryptoOverviewGrid from "@/components/dashboard/crypto-overview-grid";
 import CryptoPriceChart from "@/components/dashboard/crypto-price-chart";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
+import DownloadDataLink from "@/components/download-data-link";
 import {
   getCryptoMarketData,
   parseCryptoInstrument,
 } from "@/server/crypto/service";
 import { getCryptoMarketMeta } from "@/lib/crypto";
+import { buildDataPageHref } from "@/lib/data-export";
 import { ServiceError } from "@/server/shared/errors";
 import type { CryptoInstrument, CryptoRange } from "@/types/api";
 
@@ -203,12 +205,20 @@ export default async function CryptoInstrumentPage({
             </div>
           </div>
 
-          <Badge
-            variant="outline"
-            className="border-black/[0.08] bg-[#f4f8ff] font-mono text-sm text-[#161616]"
-          >
-            {marketMeta.symbol} · Deribit
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge
+              variant="outline"
+              className="border-black/[0.08] bg-[#f4f8ff] font-mono text-sm text-[#161616]"
+            >
+              {marketMeta.symbol} · Deribit
+            </Badge>
+            <DownloadDataLink
+              href={buildDataPageHref({
+                asset_class: "crypto",
+                asset: instrument,
+              })}
+            />
+          </div>
         </div>
       </header>
 
