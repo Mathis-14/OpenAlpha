@@ -192,6 +192,19 @@ export interface CommodityOverview extends CommodityDiscoveryItem {
   market_state: string | null;
 }
 
+// ── Data Export ─────────────────────────────────────────────────────────────
+
+export type DataAssetClass = "stock" | "macro" | "commodity" | "crypto";
+export type DataExportSchema = "ohlcv" | "series";
+
+export interface DataExportQuery {
+  asset_class: DataAssetClass;
+  asset: string;
+  country?: MacroCountry;
+  start_date: string;
+  end_date: string;
+}
+
 // ── SEC Filings (EDGAR) ─────────────────────────────────────────────────────
 
 export interface FilingSection {
@@ -232,7 +245,7 @@ export interface NewsResponse {
 export interface AgentRequest {
   query: string;
   ticker?: string;
-  dashboard_context?: "macro" | "crypto" | "commodity";
+  dashboard_context?: "macro" | "crypto" | "commodity" | "data";
   country?: MacroCountry;
   crypto_instrument?: CryptoInstrument;
   commodity_instrument?: CommodityInstrumentSlug;
@@ -244,6 +257,7 @@ export type AgentEventType =
   | "text_delta"
   | "display_chart"
   | "display_metric"
+  | "display_download"
   | "display_table"
   | "text"
   | "done"
