@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="alGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#E8EEF5"/>
+      <stop offset="100%" stop-color="#9AA9B7"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="20" fill="#F5F8FB" stroke="#C9D4DF" stroke-width="2.5"/>
+  <polygon points="32,18 42,42 37,42 34,35 30,35 27,42 22,42" fill="url(#alGrad)"/>
+  <rect x="29" y="30" width="6" height="2.5" rx="1.25" fill="#F5F8FB"/>
+  <text x="32" y="55" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#64788E" text-anchor="middle" letter-spacing="0.8">AL</text>
+</svg>

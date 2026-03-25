@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <circle cx="32" cy="32" r="20" fill="#FBEFE8" stroke="#D9B6A2" stroke-width="2.5"/>
+  <path d="M32 20c8 0 13 6 13 12s-5 12-13 12-13-6-13-12 5-12 13-12Z" fill="#9B5A3C"/>
+  <path d="M32 22v20M26 25c3 3 9 3 12 0M26 39c3-3 9-3 12 0" stroke="#E6C8BA" stroke-width="1.8" stroke-linecap="round"/>
+  <text x="32" y="55" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#8B4F34" text-anchor="middle" letter-spacing="0.8">COCOA</text>
+</svg>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="copperGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F0B08B"/>
+      <stop offset="100%" stop-color="#B8642F"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="32" cy="32" r="20" fill="#FFF4ED" stroke="#E8C4AB" stroke-width="2.5"/>
+  <circle cx="32" cy="32" r="12.5" fill="url(#copperGrad)"/>
+  <circle cx="32" cy="32" r="5.5" fill="#FFF4ED" opacity="0.95"/>
+  <text
+    x="32"
+    y="55"
+    font-family="Arial, sans-serif"
+    font-size="8"
+    font-weight="700"
+    fill="#8B4E2B"
+    text-anchor="middle"
+    letter-spacing="0.8"
+  >
+    CU
+  </text>
+</svg>

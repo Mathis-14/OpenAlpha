@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <circle cx="32" cy="32" r="20" fill="#FFF4EA" stroke="#EBC19A" stroke-width="2.5"/>
+  <path d="M24 21h12a3 3 0 0 1 3 3v18H22V24a3 3 0 0 1 2-3Z" fill="#F28C28"/>
+  <path d="M39 25h4l4 5v9a3 3 0 0 1-6 0v-7h-2" fill="none" stroke="#9C5A18" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="26" y="25" width="9" height="6" rx="1.5" fill="#FFE3C4"/>
+  <text x="32" y="55" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#9C5A18" text-anchor="middle" letter-spacing="0.8">GAS</text>
+</svg>
