@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   CheckCircle2,
+  Download,
   LayoutDashboard,
   Loader2,
   Send,
@@ -63,13 +64,21 @@ interface DisplayChartEntry {
   points: { date: number; close: number }[];
 }
 
+interface DisplayDownloadEntry {
+  type: "display_download";
+  href: string;
+  label: string;
+  description: string;
+}
+
 type ChatEntry =
   | ToolCallEntry
   | ToolResultEntry
   | TextEntry
   | ErrorEntry
   | DisplayMetricEntry
-  | DisplayChartEntry;
+  | DisplayChartEntry
+  | DisplayDownloadEntry;
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -84,6 +93,7 @@ interface AgentChatProps {
   macroCountry?: MacroCountry;
   cryptoInstrument?: CryptoInstrument;
   commodityInstrument?: CommodityInstrumentSlug;
+  dataAssistant?: boolean;
 }
 
 const TICKER_SUGGESTIONS = [
@@ -107,6 +117,12 @@ const LANDING_SUGGESTIONS = [
   "What are the latest U.S. inflation data?",
   "What's the latest trend in gold?",
   "How is Bitcoin performing this week?",
+];
+
+const DATA_SUGGESTIONS = [
+  "I want gold data for a momentum project.",
+  "I need BTC daily data for volatility research.",
+  "I want U.S. CPI data for an inflation study.",
 ];
 
 const MACRO_SUGGESTIONS: Record<MacroCountry, string[]> = {
@@ -154,6 +170,7 @@ export default function AgentChat({
   macroCountry,
   cryptoInstrument,
   commodityInstrument,
+  dataAssistant = false,
 }: AgentChatProps) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -205,7 +222,9 @@ export default function AgentChat({
         {
           query: query.trim(),
           ticker,
-          dashboard_context: commodityInstrument
+          dashboard_context: dataAssistant
+            ? "data"
+            : commodityInstrument
             ? "commodity"
             : cryptoInstrument
               ? "crypto"
@@ -282,6 +301,8 @@ export default function AgentChat({
 
   const suggestions = ticker
     ? TICKER_SUGGESTIONS
+    : dataAssistant
+      ? DATA_SUGGESTIONS
     : commodityInstrument
       ? getCommoditySuggestions(commodityInstrument)
     : cryptoInstrument
@@ -295,6 +316,8 @@ export default function AgentChat({
 
   const placeholderText = ticker
     ? `Ask about ${ticker}...`
+    : dataAssistant
+      ? "Describe your project and what data you need..."
     : commodityInstrument
       ? `Ask about ${commodityMeta?.name ?? commodityInstrument}...`
     : cryptoInstrument
@@ -321,6 +344,8 @@ export default function AgentChat({
     </>
   ) : cryptoInstrument && cryptoMeta ? (
     `Ask about ${cryptoMeta.name}. Alpha will use live Deribit market data from this ${cryptoMeta.detailLabel.toLowerCase()} dashboard before answering.`
+  ) : dataAssistant ? (
+    "Describe your project and what data you need. Alpha will do it for you."
   ) : macroCountry ? (
     `Ask about ${
       macroCountry === "fr" ? "France" : "U.S."
@@ -344,7 +369,10 @@ export default function AgentChat({
                   ? "h-[min(70vh,560px)] sm:h-[min(72vh,620px)]"
                   : "h-[420px] sm:h-[460px]",
             )
-          : "h-full rounded-[16px] border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]",
+          : cn(
+              "h-full rounded-[16px] border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]",
+              dataAssistant && "shadow-[0_30px_60px_-36px_rgba(0,0,0,0.12)]",
+            ),
       )}
     >
       <CardHeader
@@ -365,13 +393,15 @@ export default function AgentChat({
             </div>
           </div>
         ) : (
-          <div className="space-y-1.5">
-            <CardTitle className="flex items-center gap-2 text-[#161616]">
+            <div className="space-y-1.5">
+              <CardTitle className="flex items-center gap-2 text-[#161616]">
               <AgentAlphaIcon tone="light" className="h-[1.75rem] w-[1.75rem]" />
-              Alpha
+              {dataAssistant ? "Data assistant" : "Alpha"}
             </CardTitle>
             <p className="text-sm font-light text-black/62">
-              {commodityInstrument && commodityMeta
+              {dataAssistant
+                ? "Describe your project and what data you need. Alpha will do it for you."
+                : commodityInstrument && commodityMeta
                 ? `Ask about ${commodityMeta.name}. Alpha will stay grounded in this commodity dashboard.`
                 : cryptoInstrument && cryptoMeta
                 ? `Ask about ${cryptoMeta.symbol}. Alpha will stay grounded in Deribit market data from this ${cryptoMeta.detailLabel.toLowerCase()} dashboard.`
@@ -408,13 +438,15 @@ export default function AgentChat({
               )}
             >
               {showLandingIntro && (
-                <div className="space-y-3">
+                <div className={cn("space-y-3", dataAssistant && "space-y-2")}>
                   <p
                     className={cn(
                       "text-muted-foreground",
                       isLanding
                         ? "mx-auto max-w-2xl text-[15px] leading-7 font-light text-black/66"
-                        : "text-sm",
+                        : dataAssistant
+                          ? "text-sm leading-6 text-black/68"
+                          : "text-sm",
                     )}
                   >
                     {introText}
@@ -425,6 +457,7 @@ export default function AgentChat({
                 className={cn(
                   "flex flex-wrap gap-2.5",
                   isLanding && "justify-center",
+                  dataAssistant && "gap-2",
                 )}
               >
                 {suggestions.map((s) => (
@@ -435,7 +468,9 @@ export default function AgentChat({
                       "rounded-full border transition-colors",
                       isLanding
                         ? "border-black/[0.08] bg-[#f4f8ff] px-4 py-2 text-xs font-normal text-black/74 hover:bg-[#e9f3ff] hover:text-[#161616]"
-                        : "border-black/[0.08] bg-white px-3 py-1.5 text-xs text-black/62 hover:bg-[#f4f8ff] hover:text-[#161616]",
+                        : dataAssistant
+                          ? "border-black/[0.08] bg-white px-3 py-2 text-xs text-black/68 hover:bg-[#f4f8ff] hover:text-[#161616]"
+                          : "border-black/[0.08] bg-white px-3 py-1.5 text-xs text-black/62 hover:bg-[#f4f8ff] hover:text-[#161616]",
                     )}
                   >
                     {s}
@@ -459,6 +494,7 @@ export default function AgentChat({
               onOpenCommodity={(instrument) =>
                 router.push(`/commodities/${instrument}`)
               }
+              onOpenDownload={(href) => router.push(href)}
             />
           ))}
         </div>
@@ -554,6 +590,15 @@ function sseToEntry(sse: AgentSSE): ChatEntry | null {
         symbol: (sse.data.symbol as string) ?? "",
         period: (sse.data.period as string) ?? "",
         points: (sse.data.points as { date: number; close: number }[]) ?? [],
+      };
+    case "display_download":
+      return {
+        type: "display_download",
+        href: (sse.data.href as string) ?? "",
+        label: (sse.data.label as string) ?? "Get the data",
+        description:
+          (sse.data.description as string) ??
+          "Open the prefilled data export tool.",
       };
     case "error":
       return {
@@ -695,6 +740,7 @@ function MessageBubble({
   onOpenMacro,
   onOpenCrypto,
   onOpenCommodity,
+  onOpenDownload,
 }: {
   message: ChatMessage;
   streaming: boolean;
@@ -703,6 +749,7 @@ function MessageBubble({
   onOpenMacro: (country: MacroCountry) => void;
   onOpenCrypto: (instrument: CryptoInstrument) => void;
   onOpenCommodity: (instrument: CommodityInstrumentSlug) => void;
+  onOpenDownload: (href: string) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -731,6 +778,9 @@ function MessageBubble({
   );
   const displayCharts = entries.filter(
     (e): e is DisplayChartEntry => e.type === "display_chart",
+  );
+  const displayDownloads = entries.filter(
+    (e): e is DisplayDownloadEntry => e.type === "display_download",
   );
   const errorEntries = entries.filter(
     (e): e is ErrorEntry => e.type === "error",
@@ -803,6 +853,15 @@ function MessageBubble({
         <ChartDisplay key={`chart-${i}`} entry={entry} variant={variant} />
       ))}
 
+      {displayDownloads.map((entry, i) => (
+        <DownloadSuggestionCard
+          key={`download-${i}`}
+          entry={entry}
+          variant={variant}
+          onOpen={() => onOpenDownload(entry.href)}
+        />
+      ))}
+
       {message.content && (
         <div className="flex gap-2.5">
           <div
@@ -846,6 +905,68 @@ function MessageBubble({
           {toolEntries.length > 0 ? "Processing..." : "Thinking..."}
         </div>
       )}
+    </div>
+  );
+}
+
+function DownloadSuggestionCard({
+  entry,
+  onOpen,
+  variant,
+}: {
+  entry: DisplayDownloadEntry;
+  onOpen: () => void;
+  variant: "dashboard" | "landing";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-[14px] p-3 text-left",
+        variant === "landing" || variant === "dashboard"
+          ? "border border-black/[0.08] bg-[#f4f8ff]"
+          : "border border-white/[0.08] bg-white/[0.03]",
+      )}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <p
+            className={cn(
+              "inline-flex items-center gap-2 text-[11px] font-normal uppercase tracking-[0.2em]",
+              variant === "landing" || variant === "dashboard"
+                ? "text-black/54"
+                : "text-white/52",
+            )}
+          >
+            <Download className="h-3.5 w-3.5" />
+            {entry.label === "Get the data with details"
+              ? "Export Plan Ready"
+              : "Raw CSV Ready"}
+          </p>
+          <p
+            className={cn(
+              "text-sm",
+              variant === "landing" || variant === "dashboard"
+                ? "text-black/76"
+                : "text-white/78",
+            )}
+          >
+            {entry.description}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className={cn(
+            "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[10px] px-4 text-sm font-medium transition-colors",
+            variant === "landing" || variant === "dashboard"
+              ? "border border-black/[0.08] bg-[#1080ff] text-white hover:bg-[#006fe6]"
+              : "border border-white/[0.1] bg-white text-black hover:bg-white/92",
+          )}
+        >
+          {entry.label}
+          <ArrowUpRight className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }

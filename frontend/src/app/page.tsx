@@ -8,6 +8,7 @@ import {
   BrainCircuit,
   ChartNoAxesCombined,
   Coins,
+  Database,
   FileSearch,
   Globe,
   PackageSearch,
@@ -77,14 +78,14 @@ export default function LandingPage() {
   const toolsAnimationDelay =
     showAgent || showBrowse ? "360ms" : "3050ms";
 
-  const toolsSection = (
+  const assetClassesSection = (
     <div
       className="w-full max-w-[920px] animate-[fadeSlideUp_0.75s_ease-out_both]"
       style={{ animationDelay: toolsAnimationDelay }}
     >
       <div className="rounded-[16px] border border-black/[0.08] bg-white p-5 text-left shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] sm:p-6">
         <div className="mb-4 space-y-1">
-          <p className="text-sm font-medium text-[#161616]">Tools</p>
+          <p className="text-sm font-medium text-[#161616]">Asset Classes</p>
           <p className="text-sm font-light text-black/62">
             Open a dedicated browsing surface directly.
           </p>
@@ -176,6 +177,38 @@ export default function LandingPage() {
     </div>
   );
 
+  const toolsSection = (
+    <div
+      className="w-full max-w-[920px] animate-[fadeSlideUp_0.75s_ease-out_both]"
+      style={{ animationDelay: showAgent || showBrowse ? "420ms" : "3150ms" }}
+    >
+      <div className="rounded-[16px] border border-black/[0.08] bg-white p-5 text-left shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] sm:p-6">
+        <div className="mb-4 space-y-1">
+          <p className="text-sm font-medium text-[#161616]">Tools</p>
+          <p className="text-sm font-light text-black/62">
+            Export raw CSV series for downstream analysis.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => router.push("/data")}
+          className="flex w-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
+        >
+          <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
+            <Database className="h-4 w-4" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-[#161616]">Get the data</p>
+            <p className="text-xs font-light leading-5 text-black/62">
+              Download raw market CSVs.
+            </p>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafcff]">
       <LandingSpotlight />
@@ -258,7 +291,12 @@ export default function LandingPage() {
             )}
           </div>
 
-          {!showAgent && !showBrowse && toolsSection}
+          {!showAgent && !showBrowse && (
+            <>
+              {assetClassesSection}
+              {toolsSection}
+            </>
+          )}
 
           {showBrowse && (
             <div
@@ -338,31 +376,37 @@ export default function LandingPage() {
         </section>
 
         {(showAgent || showBrowse) && (
-          <section
-            className="mt-12 grid w-full max-w-[1120px] gap-4 md:grid-cols-2 xl:grid-cols-4 animate-[fadeSlideUp_0.75s_ease-out_both]"
-            style={{ animationDelay: showAgent ? "260ms" : "160ms" }}
-          >
-            {FEATURE_CARDS.map((feature) => {
-              const Icon = feature.icon;
+          <>
+            <div className="mt-12 flex w-full max-w-[920px] flex-col gap-6">
+              {assetClassesSection}
+              {toolsSection}
+            </div>
+            <section
+              className="mt-12 grid w-full max-w-[1120px] gap-4 md:grid-cols-2 xl:grid-cols-4 animate-[fadeSlideUp_0.75s_ease-out_both]"
+              style={{ animationDelay: showAgent ? "260ms" : "160ms" }}
+            >
+              {FEATURE_CARDS.map((feature) => {
+                const Icon = feature.icon;
 
-              return (
-                <div
-                  key={feature.title}
-                  className="group rounded-[16px] border border-black/[0.08] bg-white p-5 text-left shadow-[0_20px_46px_-42px_rgba(0,0,0,0.08)] transition-all duration-300 hover:-translate-y-0.5 hover:border-black/[0.12] hover:bg-[#fcfbf9]"
-                >
-                  <div className="mb-4 inline-flex rounded-[10px] border border-black/[0.08] bg-[#f7f6f2] p-3 text-black/64">
-                    <Icon className="h-5 w-5" />
+                return (
+                  <div
+                    key={feature.title}
+                    className="group rounded-[16px] border border-black/[0.08] bg-white p-5 text-left shadow-[0_20px_46px_-42px_rgba(0,0,0,0.08)] transition-all duration-300 hover:-translate-y-0.5 hover:border-black/[0.12] hover:bg-[#fcfbf9]"
+                  >
+                    <div className="mb-4 inline-flex rounded-[10px] border border-black/[0.08] bg-[#f7f6f2] p-3 text-black/64">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <h3 className="text-sm font-medium text-[#161616]">
+                      {feature.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 font-light text-black/64">
+                      {feature.description}
+                    </p>
                   </div>
-                  <h3 className="text-sm font-medium text-[#161616]">
-                    {feature.title}
-                  </h3>
-                  <p className="mt-2 text-sm leading-6 font-light text-black/64">
-                    {feature.description}
-                  </p>
-                </div>
-              );
-            })}
-          </section>
+                );
+              })}
+            </section>
+          </>
         )}
 
         <footer className="mt-10 flex w-full max-w-[1120px] flex-col gap-3 border-t border-black/[0.08] pt-5 text-sm text-black/52 sm:flex-row sm:items-center sm:justify-between">

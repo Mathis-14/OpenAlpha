@@ -47,6 +47,8 @@ function normalizeRequest(body: AgentRouteRequest) {
           ? ("crypto" as const)
           : body.dashboard_context === "commodity"
             ? ("commodity" as const)
+            : body.dashboard_context === "data"
+              ? ("data" as const)
           : undefined,
     country: body.country === "fr" ? "fr" as const : body.country === "us" ? "us" as const : undefined,
     crypto_instrument: cryptoInstrument,

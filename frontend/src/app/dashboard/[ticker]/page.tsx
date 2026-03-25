@@ -11,6 +11,8 @@ import NewsFeed from "@/components/dashboard/news-feed";
 import FilingsPanel from "@/components/dashboard/filings-panel";
 import AgentChat from "@/components/dashboard/agent-chat";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
+import DownloadDataLink from "@/components/download-data-link";
+import { buildDataPageHref } from "@/lib/data-export";
 import { ServiceError } from "@/server/shared/errors";
 import { getFilings } from "@/server/filings/service";
 import { getMarketData } from "@/server/market/service";
@@ -135,12 +137,20 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
           <div className="max-w-[360px] flex-1">
             <TickerSearch variant="dashboard" />
           </div>
-          <Badge
-            variant="outline"
-            className="border-black/[0.08] bg-[#f4f8ff] font-mono text-sm text-[#161616]"
-          >
-            {symbol}
-          </Badge>
+          <div className="ml-auto flex items-center gap-3">
+            <Badge
+              variant="outline"
+              className="border-black/[0.08] bg-[#f4f8ff] font-mono text-sm text-[#161616]"
+            >
+              {symbol}
+            </Badge>
+            <DownloadDataLink
+              href={buildDataPageHref({
+                asset_class: "stock",
+                asset: symbol,
+              })}
+            />
+          </div>
         </div>
       </header>
 

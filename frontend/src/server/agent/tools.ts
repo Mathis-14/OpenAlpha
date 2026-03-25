@@ -5,11 +5,14 @@ import type {
   CryptoInstrument,
   CryptoOverview,
   CryptoRange,
+  DataAssetClass,
+  DataExportQuery,
   MacroCountry,
   MacroIndicator,
   PeriodType,
   PricePoint,
 } from "@/types/api";
+import { formatDateInputValue, getDefaultDateRange } from "@/lib/data-export";
 import {
   getCommodityOverview,
   getCommodityPriceHistory,
@@ -19,10 +22,16 @@ import {
   coerceCryptoInstrument,
   getCryptoOverview,
   getCryptoPriceHistory,
+  parseCryptoInstrument,
   parseCryptoRange,
 } from "@/server/crypto/service";
+import { parseDataAssetClass } from "@/server/data/export";
 import { getFilings } from "@/server/filings/service";
-import { getMacroSnapshotForCountry } from "@/server/macro/service";
+import {
+  getMacroSnapshotForCountry,
+  parseMacroCountry,
+  parseMacroIndicatorSlug,
+} from "@/server/macro/service";
 import {
   getFundamentals,
   getPriceHistory,
@@ -56,9 +65,13 @@ type DisplayChart = {
 };
 
 export type DisplayEvent = DisplayMetric | DisplayChart;
+export type SuggestedDataExport = DataExportQuery & {
+  reason?: string;
+};
 
 const MAX_HISTORY_POINTS = 30;
 const MAX_FILING_SECTION_CHARS = 2_000;
+const DATA_EXPORT_PRESETS = new Set(["1mo", "3mo", "1y", "5y"]);
 
 const HISTORY_PERIODS = new Set<PeriodType>([
   "1d",
@@ -124,6 +137,104 @@ function normalizeCommodityRange(value: unknown): CommodityRange {
     COMMODITY_HISTORY_PERIODS.has(value as CommodityRange)
     ? (value as CommodityRange)
     : "1mo";
+}
+
+function toPresetDateRange(preset: "1mo" | "3mo" | "1y" | "5y") {
+  const endDate = new Date();
+  const startDate = new Date(endDate);
+  const days =
+    preset === "1mo"
+      ? 31
+      : preset === "3mo"
+        ? 93
+        : preset === "1y"
+          ? 365
+          : 365 * 5;
+  startDate.setUTCDate(startDate.getUTCDate() - days);
+
+  return {
+    startDate: formatDateInputValue(startDate),
+    endDate: formatDateInputValue(endDate),
+  };
+}
+
+function isDateInput(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+export function normalizeSuggestedDataExportArgs(
+  argumentsObject: Record<string, unknown>,
+): SuggestedDataExport {
+  const assetClass = parseDataAssetClass(
+    typeof argumentsObject.asset_class === "string"
+      ? argumentsObject.asset_class
+      : null,
+  );
+
+  const rawAsset = String(argumentsObject.asset ?? "").trim();
+  if (!rawAsset) {
+    throw new Error("suggest_data_export requires a supported asset");
+  }
+
+  let asset: string;
+  let country: MacroCountry | undefined;
+
+  switch (assetClass) {
+    case "stock":
+      asset = rawAsset.toUpperCase();
+      break;
+    case "commodity":
+      asset = parseCommodityInstrument(rawAsset);
+      break;
+    case "crypto":
+      asset = parseCryptoInstrument(rawAsset);
+      break;
+    case "macro":
+      asset = parseMacroIndicatorSlug(rawAsset);
+      country = parseMacroCountry(
+        typeof argumentsObject.country === "string"
+          ? argumentsObject.country
+          : null,
+      );
+      break;
+  }
+
+  let start_date: string;
+  let end_date: string;
+  if (isDateInput(argumentsObject.start_date) && isDateInput(argumentsObject.end_date)) {
+    start_date = argumentsObject.start_date;
+    end_date = argumentsObject.end_date;
+  } else if (
+    typeof argumentsObject.range_preset === "string" &&
+    DATA_EXPORT_PRESETS.has(argumentsObject.range_preset)
+  ) {
+    const range = toPresetDateRange(
+      argumentsObject.range_preset as "1mo" | "3mo" | "1y" | "5y",
+    );
+    start_date = range.startDate;
+    end_date = range.endDate;
+  } else {
+    const range = getDefaultDateRange(assetClass as DataAssetClass);
+    start_date = range.startDate;
+    end_date = range.endDate;
+  }
+
+  const plan: SuggestedDataExport = {
+    asset_class: assetClass as DataAssetClass,
+    asset,
+    start_date,
+    end_date,
+  };
+
+  if (assetClass === "macro") {
+    plan.country = country ?? "us";
+  }
+
+  if (typeof argumentsObject.reason === "string" && argumentsObject.reason.trim()) {
+    plan.reason = argumentsObject.reason.trim();
+  }
+
+  return plan;
 }
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
@@ -287,6 +398,52 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
             description: "Macro dashboard country context (default: us)",
           },
         },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "suggest_data_export",
+      description:
+        "Create one concrete Get the data export plan for the current user request. Use for CSV, download, or dataset-planning help.",
+      parameters: {
+        type: "object",
+        properties: {
+          asset_class: {
+            type: "string",
+            enum: ["stock", "macro", "commodity", "crypto"],
+            description: "Supported asset class for the export",
+          },
+          asset: {
+            type: "string",
+            description:
+              "Ticker, macro indicator slug, commodity slug, or supported crypto instrument",
+          },
+          country: {
+            type: "string",
+            enum: ["us", "fr"],
+            description: "Macro country only. Use for macro exports.",
+          },
+          range_preset: {
+            type: "string",
+            enum: ["1mo", "3mo", "1y", "5y"],
+            description: "Preferred date window when exact dates were not specified.",
+          },
+          start_date: {
+            type: "string",
+            description: "Optional exact start date in yyyy-mm-dd format.",
+          },
+          end_date: {
+            type: "string",
+            description: "Optional exact end date in yyyy-mm-dd format.",
+          },
+          reason: {
+            type: "string",
+            description: "Short explanation of why this export fits the user request.",
+          },
+        },
+        required: ["asset_class", "asset"],
       },
     },
   },
@@ -568,6 +725,8 @@ export async function dispatchToolWithDisplay(
         },
       },
     ];
+  } else if (name === "suggest_data_export") {
+    result = normalizeSuggestedDataExportArgs(argumentsObject);
   } else if (name === "get_commodity_overview") {
     const instrument = normalizeCommodityInstrument(argumentsObject.instrument);
     const overview = await getCommodityOverview(instrument);

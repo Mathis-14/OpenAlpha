@@ -8,6 +8,8 @@ import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import AgentChat from "@/components/dashboard/agent-chat";
 import CommodityOverviewGrid from "@/components/dashboard/commodity-overview-grid";
 import CommodityPriceChart from "@/components/dashboard/commodity-price-chart";
+import DownloadDataLink from "@/components/download-data-link";
+import { buildDataPageHref } from "@/lib/data-export";
 import {
   getCommodityCategoryLabel,
   getCommodityMeta,
@@ -147,12 +149,20 @@ export default async function CommodityInstrumentPage({
             />
           </div>
 
-          <Badge
-            variant="outline"
-            className="border-black/[0.08] bg-[#f4f8ff] font-mono text-sm text-[#161616]"
-          >
-            Commodities · {marketMeta.short_label}
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge
+              variant="outline"
+              className="border-black/[0.08] bg-[#f4f8ff] font-mono text-sm text-[#161616]"
+            >
+              Commodities · {marketMeta.short_label}
+            </Badge>
+            <DownloadDataLink
+              href={buildDataPageHref({
+                asset_class: "commodity",
+                asset: instrument,
+              })}
+            />
+          </div>
         </div>
       </header>
 

@@ -6,8 +6,10 @@ import TickerSearch from "@/components/ticker-search";
 import LandingSpotlight from "@/components/landing-spotlight";
 import AgentChat from "@/components/dashboard/agent-chat";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
+import DownloadDataLink from "@/components/download-data-link";
 import MacroChart from "@/components/dashboard/macro-chart";
 import MacroOverviewGrid from "@/components/dashboard/macro-overview-grid";
+import { buildDataPageHref } from "@/lib/data-export";
 import {
   MacroServiceError,
   getMacroIndicator,
@@ -163,12 +165,21 @@ export default async function MacroPage({
           <div className="max-w-[360px] flex-1">
             <TickerSearch variant="dashboard" />
           </div>
-          <Badge
-            variant="outline"
-            className="border-black/[0.08] bg-[#f4f8ff] font-mono text-sm text-[#161616]"
-          >
-            {country === "fr" ? "Macro · FR" : "Macro · US"}
-          </Badge>
+          <div className="ml-auto flex items-center gap-3">
+            <Badge
+              variant="outline"
+              className="border-black/[0.08] bg-[#f4f8ff] font-mono text-sm text-[#161616]"
+            >
+              {country === "fr" ? "Macro · FR" : "Macro · US"}
+            </Badge>
+            <DownloadDataLink
+              href={buildDataPageHref({
+                asset_class: "macro",
+                asset: "fed-funds",
+                country,
+              })}
+            />
+          </div>
         </div>
       </header>
 
