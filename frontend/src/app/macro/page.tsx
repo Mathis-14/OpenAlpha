@@ -9,15 +9,18 @@ import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import MacroChart from "@/components/dashboard/macro-chart";
 import MacroOverviewGrid from "@/components/dashboard/macro-overview-grid";
 import {
-  ApiError,
-  getMacroSeries,
-  getMacroSnapshot,
-} from "@/lib/api";
+  MacroServiceError,
+  getMacroIndicator,
+  getMacroSnapshotForCountry,
+} from "@/server/macro/service";
 import type {
   MacroCountry,
   MacroHistoryRange,
   MacroIndicatorSlug,
 } from "@/types/api";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 const DEFAULT_INDICATOR: MacroIndicatorSlug = "fed-funds";
 const DEFAULT_RANGE: MacroHistoryRange = "5y";
@@ -35,23 +38,23 @@ export default async function MacroPage({
   const country: MacroCountry = params?.country === "fr" ? "fr" : "us";
 
   const [snapshotResult, seriesResult] = await Promise.all([
-    getMacroSnapshot(country)
+    getMacroSnapshotForCountry(country)
       .then((data) => ({ ok: true as const, data }))
       .catch((error: unknown) => ({
         ok: false as const,
-        status: error instanceof ApiError ? error.status : 500,
+        status: error instanceof MacroServiceError ? error.status : 500,
         message:
-          error instanceof ApiError
+          error instanceof MacroServiceError
             ? error.message
             : "Failed to load macro snapshot",
       })),
-    getMacroSeries(DEFAULT_INDICATOR, DEFAULT_RANGE, country)
+    getMacroIndicator(DEFAULT_INDICATOR, DEFAULT_RANGE, country)
       .then((data) => ({ ok: true as const, data }))
       .catch((error: unknown) => ({
         ok: false as const,
-        status: error instanceof ApiError ? error.status : 500,
+        status: error instanceof MacroServiceError ? error.status : 500,
         message:
-          error instanceof ApiError
+          error instanceof MacroServiceError
             ? error.message
             : "Failed to load macro history",
       })),

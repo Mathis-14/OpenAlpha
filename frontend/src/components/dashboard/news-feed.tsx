@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { NewsArticle } from "@/types/api";
-import { ExternalLink } from "lucide-react";
+import { AlertTriangle, ExternalLink } from "lucide-react";
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -14,7 +14,29 @@ function timeAgo(dateStr: string | null): string {
   return `${days}d ago`;
 }
 
-export default function NewsFeed({ articles }: { articles: NewsArticle[] }) {
+export default function NewsFeed({
+  articles,
+  error,
+}: {
+  articles: NewsArticle[];
+  error?: string | null;
+}) {
+  if (error) {
+    return (
+      <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
+        <CardHeader>
+          <CardTitle className="text-[#161616]">News</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-start gap-2.5 text-sm text-[#b93828]">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>{error}</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (articles.length === 0) {
     return (
       <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">

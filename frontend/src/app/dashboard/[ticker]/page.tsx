@@ -11,35 +11,46 @@ import NewsFeed from "@/components/dashboard/news-feed";
 import FilingsPanel from "@/components/dashboard/filings-panel";
 import AgentChat from "@/components/dashboard/agent-chat";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
-import {
-  getMarketData,
-  getNews,
-  getFilings,
-  ApiError,
-} from "@/lib/api";
+import { ServiceError } from "@/server/shared/errors";
+import { getFilings } from "@/server/filings/service";
+import { getMarketData } from "@/server/market/service";
+import { getNews } from "@/server/news/service";
 import type { MarketResponse } from "@/types/api";
 
 interface DashboardPageProps {
   params: Promise<{ ticker: string }>;
 }
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage({ params }: DashboardPageProps) {
   const { ticker } = await params;
   const symbol = ticker.toUpperCase();
 
-  const [marketResult, news, filings] = await Promise.all([
+  const [marketResult, newsResult, filingsResult] = await Promise.all([
     getMarketData(symbol)
       .then((d) => ({ ok: true as const, data: d }))
       .catch((e: unknown) => ({
         ok: false as const,
-        status: e instanceof ApiError ? e.status : 500,
+        status: e instanceof ServiceError ? e.status : 500,
         message:
-          e instanceof ApiError
+          e instanceof ServiceError
             ? e.message
             : "Failed to load market data",
       })),
-    getNews(symbol).catch(() => ({ ticker: symbol, articles: [] })),
-    getFilings(symbol).catch(() => ({ ticker: symbol, filings: [] })),
+    getNews(symbol)
+      .then((data) => ({ ok: true as const, data }))
+      .catch((error: unknown) => ({
+        ok: false as const,
+        status: error instanceof ServiceError ? error.status : 500,
+      })),
+    getFilings(symbol)
+      .then((data) => ({ ok: true as const, data }))
+      .catch((error: unknown) => ({
+        ok: false as const,
+        status: error instanceof ServiceError ? error.status : 500,
+      })),
   ]);
 
   let market: MarketResponse | null = null;
@@ -56,35 +67,51 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
           : "Something went wrong loading market data.";
   }
 
-  const dataWidgets = (
-    <>
-      {market ? (
-        <>
-          <OverviewCard data={market.overview} />
-          <PriceChart
-            ticker={symbol}
-            initialData={market.price_history}
-            initialPeriod="1mo"
-          />
-          <FundamentalsGrid data={market.fundamentals} />
-        </>
-      ) : (
-        <Card className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
-          <CardHeader>
-            <CardTitle className="text-[#161616]">{symbol}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm font-light text-black/64">{marketError}</p>
-          </CardContent>
-        </Card>
-      )}
+  const newsError =
+    newsResult.ok || newsResult.status === 404
+      ? null
+      : "News is temporarily unavailable. Try again in a moment.";
+  const filingsError =
+    filingsResult.ok || filingsResult.status === 404
+      ? null
+      : "SEC filings are temporarily unavailable. Try again in a moment.";
+  const news = newsResult.ok ? newsResult.data : { ticker: symbol, articles: [] };
+  const filings = filingsResult.ok
+    ? filingsResult.data
+    : { ticker: symbol, filings: [] };
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <NewsFeed articles={news.articles} />
-        <FilingsPanel filings={filings.filings} />
-      </div>
-    </>
-  );
+  const dataWidgets = [
+    market ? (
+      <OverviewCard key="overview" data={market.overview} />
+    ) : (
+      <Card
+        key="market-error"
+        className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
+      >
+        <CardHeader>
+          <CardTitle className="text-[#161616]">{symbol}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm font-light text-black/64">{marketError}</p>
+        </CardContent>
+      </Card>
+    ),
+    market ? (
+      <PriceChart
+        key="price-chart"
+        ticker={symbol}
+        initialData={market.price_history}
+        initialPeriod="1mo"
+      />
+    ) : null,
+    market ? (
+      <FundamentalsGrid key="fundamentals" data={market.fundamentals} />
+    ) : null,
+    <div key="research-panels" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <NewsFeed articles={news.articles} error={newsError} />
+      <FilingsPanel filings={filings.filings} error={filingsError} />
+    </div>,
+  ];
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafcff]">

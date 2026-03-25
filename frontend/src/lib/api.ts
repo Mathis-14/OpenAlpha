@@ -1,4 +1,3 @@
-import { getApiBaseUrl } from "@/lib/api-base";
 import type {
   AgentRequest,
   AgentEvent,
@@ -26,8 +25,10 @@ class ApiError extends Error {
   }
 }
 
-async function fetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${getApiBaseUrl()}${path}`);
+async function fetchJson<T>(
+  path: string,
+): Promise<T> {
+  const res = await fetch(path);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new ApiError(res.status, body || res.statusText);
@@ -80,9 +81,7 @@ export function getFilings(
   formType: string = "10-K",
   limit: number = 3,
 ): Promise<FilingsResponse> {
-  return fetchJson(
-    `/api/filings/${ticker}?form_type=${formType}&limit=${limit}`,
-  );
+  return fetchJson(`/api/filings/${ticker}?form_type=${formType}&limit=${limit}`);
 }
 
 // ── News ────────────────────────────────────────────────────────────────────
@@ -105,10 +104,7 @@ export async function searchTickers(
   query: string,
   signal?: AbortSignal,
 ): Promise<SearchResult[]> {
-  const res = await fetch(
-    `${getApiBaseUrl()}/api/search?q=${encodeURIComponent(query)}`,
-    { signal },
-  );
+  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal });
   if (!res.ok) return [];
   return res.json() as Promise<SearchResult[]>;
 }
@@ -119,7 +115,7 @@ export async function* streamAgent(
   request: AgentRequest,
   signal?: AbortSignal,
 ): AsyncGenerator<AgentEvent> {
-  const res = await fetch(`${getApiBaseUrl()}/api/agent`, {
+  const res = await fetch("/api/agent", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),

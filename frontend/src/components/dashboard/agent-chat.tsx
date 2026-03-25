@@ -51,7 +51,7 @@ interface DisplayChartEntry {
   type: "display_chart";
   symbol: string;
   period: string;
-  points: { date: string; close: number }[];
+  points: { date: number; close: number }[];
 }
 
 type ChatEntry =
@@ -299,7 +299,9 @@ export default function AgentChat({
               Alpha
             </CardTitle>
             <p className="text-sm font-light text-black/62">
-              Ask about {ticker}. Alpha will pull live data before answering.
+              {macroCountry
+                ? `Ask about ${macroCountry === "fr" ? "France" : "U.S."} macro data. Alpha will use the dashboard context before answering.`
+                : `Ask about ${ticker}. Alpha will pull live data before answering.`}
             </p>
           </div>
         )}
@@ -471,7 +473,7 @@ function sseToEntry(sse: AgentSSE): ChatEntry | null {
         type: "display_chart",
         symbol: (sse.data.symbol as string) ?? "",
         period: (sse.data.period as string) ?? "",
-        points: (sse.data.points as { date: string; close: number }[]) ?? [],
+        points: (sse.data.points as { date: number; close: number }[]) ?? [],
       };
     case "error":
       return {
