@@ -89,6 +89,59 @@ export interface MacroSnapshot {
   unemployment: MacroIndicator;
 }
 
+// ── Crypto Data (Deribit) ───────────────────────────────────────────────────
+
+export type CryptoInstrument = "BTC-PERPETUAL" | "ETH-PERPETUAL";
+export type CryptoRange = "1d" | "1w" | "1mo" | "3mo" | "1y" | "max";
+
+export interface CryptoDiscoveryItem {
+  instrument: CryptoInstrument;
+  name: string;
+  description: string;
+  base_currency: string;
+  quote_currency: string;
+  last_price: number;
+  mark_price: number;
+  change_24h: number | null;
+  volume_24h: number | null;
+  open_interest: number | null;
+  status: string;
+}
+
+export interface CryptoOverview {
+  instrument: CryptoInstrument;
+  name: string;
+  description: string;
+  base_currency: string;
+  quote_currency: string;
+  settlement_currency: string;
+  price_index: string;
+  status: string;
+  instrument_type: string;
+  settlement_period: string;
+  contract_size: number | null;
+  tick_size: number | null;
+  min_trade_amount: number | null;
+  max_leverage: number | null;
+  maker_commission: number | null;
+  taker_commission: number | null;
+  creation_timestamp: number | null;
+  expiration_timestamp: number | null;
+  last_price: number;
+  mark_price: number;
+  index_price: number | null;
+  best_bid_price: number | null;
+  best_ask_price: number | null;
+  high_24h: number | null;
+  low_24h: number | null;
+  change_24h: number | null;
+  volume_24h: number | null;
+  volume_notional_24h: number | null;
+  open_interest: number | null;
+  funding_8h: number | null;
+  current_funding: number | null;
+}
+
 // ── SEC Filings (EDGAR) ─────────────────────────────────────────────────────
 
 export interface FilingSection {
@@ -129,8 +182,9 @@ export interface NewsResponse {
 export interface AgentRequest {
   query: string;
   ticker?: string;
-  dashboard_context?: "macro";
+  dashboard_context?: "macro" | "crypto";
   country?: MacroCountry;
+  crypto_instrument?: CryptoInstrument;
 }
 
 export type AgentEventType =
