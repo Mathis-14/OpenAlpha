@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import LandingSpotlight from "@/components/landing-spotlight";
 import TickerSearch from "@/components/ticker-search";
+import CryptoSearch from "@/components/crypto-search";
 import AgentChat from "@/components/dashboard/agent-chat";
 
 const FEATURE_CARDS = [
@@ -43,6 +44,7 @@ export default function LandingPage() {
   const router = useRouter();
   const [showAgent, setShowAgent] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
+  const [browseMode, setBrowseMode] = useState<"stocks" | "crypto">("stocks");
   const agentShellRef = useRef<HTMLDivElement>(null);
   const shouldScrollToAgentRef = useRef(false);
 
@@ -89,7 +91,10 @@ export default function LandingPage() {
         <div className="grid gap-3 md:grid-cols-3">
           <button
             type="button"
-            onClick={() => setShowBrowse(true)}
+            onClick={() => {
+              setBrowseMode("stocks");
+              setShowBrowse(true);
+            }}
             className="flex items-start gap-3 rounded-[14px] border border-[#1080ff]/18 bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
           >
             <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
@@ -125,23 +130,21 @@ export default function LandingPage() {
 
           <button
             type="button"
-            disabled
-            className="flex cursor-not-allowed items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left opacity-80"
+            onClick={() => {
+              setBrowseMode("crypto");
+              setShowBrowse(true);
+            }}
+            className="flex items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
           >
-            <div className="mt-0.5 rounded-[10px] bg-[#f6f7f8] p-2 text-black/46">
+            <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
               <Coins className="h-4 w-4" />
             </div>
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-[#161616]">
-                  Browse crypto
-                </p>
-                <span className="rounded-full border border-black/[0.08] bg-white px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-black/42">
-                  Soon
-                </span>
-              </div>
+              <p className="text-sm font-medium text-[#161616]">
+                Browse crypto
+              </p>
               <p className="text-sm font-light leading-6 text-black/62">
-                Review major crypto assets and market structure.
+                Review BTC and ETH perpetuals with Deribit market data.
               </p>
             </div>
           </button>
@@ -217,6 +220,7 @@ export default function LandingPage() {
                       type="button"
                       onClick={() => {
                         shouldScrollToAgentRef.current = true;
+                        setBrowseMode("stocks");
                         setShowAgent(true);
                         setShowBrowse(true);
                       }}
@@ -239,19 +243,53 @@ export default function LandingPage() {
               style={{ animationDelay: showAgent ? "150ms" : "80ms" }}
             >
               <div className="rounded-[16px] border border-black/[0.08] bg-white p-5 text-left shadow-[0_30px_60px_-38px_rgba(0,0,0,0.1)] sm:p-6">
-                <div className="mb-4 space-y-1 text-center">
+                <div className="mb-4 space-y-3 text-center">
                   <p className="text-[11px] font-normal uppercase tracking-[0.22em] text-black/52">
                     Browse Directly
                   </p>
                   <h2 className="text-xl font-medium tracking-tight text-[#161616]">
-                    Open a stock workspace in one move
+                    {browseMode === "stocks"
+                      ? "Open a stock workspace in one move"
+                      : "Open a crypto dashboard in one move"}
                   </h2>
+                  <div className="flex justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBrowseMode("stocks")}
+                      className={`inline-flex h-9 items-center justify-center rounded-[10px] px-3.5 text-sm transition-colors ${
+                        browseMode === "stocks"
+                          ? "bg-[#1080ff] text-white"
+                          : "border border-black/[0.08] bg-white text-black/62 hover:bg-[#f4f8ff] hover:text-[#161616]"
+                      }`}
+                    >
+                      Stocks
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBrowseMode("crypto")}
+                      className={`inline-flex h-9 items-center justify-center rounded-[10px] px-3.5 text-sm transition-colors ${
+                        browseMode === "crypto"
+                          ? "bg-[#1080ff] text-white"
+                          : "border border-black/[0.08] bg-white text-black/62 hover:bg-[#f4f8ff] hover:text-[#161616]"
+                      }`}
+                    >
+                      Crypto
+                    </button>
+                  </div>
                 </div>
-                <TickerSearch
-                  size="lg"
-                  variant="hero"
-                  autoFocus={!showAgent}
-                />
+                {browseMode === "stocks" ? (
+                  <TickerSearch
+                    size="lg"
+                    variant="hero"
+                    autoFocus={!showAgent}
+                  />
+                ) : (
+                  <CryptoSearch
+                    size="lg"
+                    variant="hero"
+                    autoFocus={!showAgent}
+                  />
+                )}
               </div>
             </div>
           )}
