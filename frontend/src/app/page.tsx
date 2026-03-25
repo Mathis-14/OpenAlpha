@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   BrainCircuit,
+  Calculator,
   ChartNoAxesCombined,
   Coins,
   Database,
   FileSearch,
   Globe,
+  LogIn,
   PackageSearch,
   Search,
 } from "lucide-react";
@@ -18,6 +20,7 @@ import LandingSpotlight from "@/components/landing-spotlight";
 import TickerSearch from "@/components/ticker-search";
 import CommoditySearch from "@/components/commodity-search";
 import CryptoSearch from "@/components/crypto-search";
+import MacroSearch from "@/components/macro-search";
 import AgentChat from "@/components/dashboard/agent-chat";
 
 const FEATURE_CARDS = [
@@ -47,7 +50,7 @@ export default function LandingPage() {
   const router = useRouter();
   const [showAgent, setShowAgent] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
-  const [browseMode, setBrowseMode] = useState<"stocks" | "commodities" | "crypto">("stocks");
+  const [browseMode, setBrowseMode] = useState<"stocks" | "commodities" | "macro" | "crypto">("stocks");
   const agentShellRef = useRef<HTMLDivElement>(null);
   const shouldScrollToAgentRef = useRef(false);
 
@@ -83,8 +86,8 @@ export default function LandingPage() {
       className="w-full max-w-[920px] animate-[fadeSlideUp_0.75s_ease-out_both]"
       style={{ animationDelay: toolsAnimationDelay }}
     >
-      <div className="rounded-[16px] border border-black/[0.08] bg-white p-5 text-left shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] sm:p-6">
-        <div className="mb-4 space-y-1">
+      <div className="rounded-[16px] border border-black/[0.08] bg-white p-4 text-left shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] sm:p-5">
+        <div className="mb-3 space-y-1">
           <p className="text-sm font-medium text-[#161616]">Asset Classes</p>
           <p className="text-sm font-light text-black/62">
             Open a dedicated browsing surface directly.
@@ -98,7 +101,7 @@ export default function LandingPage() {
               setBrowseMode("stocks");
               setShowBrowse(true);
             }}
-            className="flex h-full items-start gap-3 rounded-[14px] border border-[#1080ff]/18 bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
+            className="flex h-full items-start gap-3 rounded-[14px] border border-[#1080ff]/18 bg-white p-3.5 text-left transition-colors hover:bg-[#f7fbff]"
           >
             <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
               <Search className="h-4 w-4" />
@@ -119,7 +122,7 @@ export default function LandingPage() {
               setBrowseMode("commodities");
               setShowBrowse(true);
             }}
-            className="flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
+            className="flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-3.5 text-left transition-colors hover:bg-[#f7fbff]"
           >
             <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
               <PackageSearch className="h-4 w-4" />
@@ -136,8 +139,11 @@ export default function LandingPage() {
 
           <button
             type="button"
-            onClick={() => router.push("/macro")}
-            className="flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
+            onClick={() => {
+              setBrowseMode("macro");
+              setShowBrowse(true);
+            }}
+            className="flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-3.5 text-left transition-colors hover:bg-[#f7fbff]"
           >
             <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
               <Globe className="h-4 w-4" />
@@ -158,7 +164,7 @@ export default function LandingPage() {
               setBrowseMode("crypto");
               setShowBrowse(true);
             }}
-            className="flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
+            className="flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-3.5 text-left transition-colors hover:bg-[#f7fbff]"
           >
             <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
               <Coins className="h-4 w-4" />
@@ -182,29 +188,69 @@ export default function LandingPage() {
       className="w-full max-w-[920px] animate-[fadeSlideUp_0.75s_ease-out_both]"
       style={{ animationDelay: showAgent || showBrowse ? "420ms" : "3150ms" }}
     >
-      <div className="rounded-[16px] border border-black/[0.08] bg-white p-5 text-left shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] sm:p-6">
-        <div className="mb-4 space-y-1">
+      <div className="rounded-[16px] border border-black/[0.08] bg-white p-4 text-left shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] sm:p-5">
+        <div className="mb-3 space-y-1">
           <p className="text-sm font-medium text-[#161616]">Tools</p>
           <p className="text-sm font-light text-black/62">
-            Export raw CSV series for downstream analysis.
+            Export raw CSVs and preview upcoming research tools.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => router.push("/data")}
-          className="flex w-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-4 text-left transition-colors hover:bg-[#f7fbff]"
-        >
-          <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
-            <Database className="h-4 w-4" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-[#161616]">Get the data</p>
-            <p className="text-xs font-light leading-5 text-black/62">
-              Download raw market CSVs.
-            </p>
-          </div>
-        </button>
+        <div className="grid gap-3 md:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => router.push("/data")}
+            className="flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-white p-3.5 text-left transition-colors hover:bg-[#f7fbff]"
+          >
+            <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
+              <Database className="h-4 w-4" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-[#161616]">Get the data</p>
+              <p className="text-xs font-light leading-5 text-black/62">
+                Download raw CSV market data.
+              </p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            disabled
+            className="relative flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-[#fbfcff] p-3.5 text-left opacity-80"
+          >
+            <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
+              <FileSearch className="h-4 w-4" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-[#161616]">Equity analysis</p>
+              <p className="text-xs font-light leading-5 text-black/62">
+                Browse equity reports with AI.
+              </p>
+            </div>
+            <span className="absolute right-3 top-3 rounded-full bg-[#f4f8ff] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-black/52">
+              Soon
+            </span>
+          </button>
+
+          <button
+            type="button"
+            disabled
+            className="relative flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-[#fbfcff] p-3.5 text-left opacity-80"
+          >
+            <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
+              <Calculator className="h-4 w-4" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-[#161616]">Quantitative tools</p>
+              <p className="text-xs font-light leading-5 text-black/62">
+                Greeks, vol surfaces, and more soon.
+              </p>
+            </div>
+            <span className="absolute right-3 top-3 rounded-full bg-[#f4f8ff] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-black/52">
+              Soon
+            </span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -215,8 +261,20 @@ export default function LandingPage() {
 
       <div className="pointer-events-none absolute inset-0 z-[2] bg-[linear-gradient(180deg,rgba(255,255,255,0.6),rgba(247,251,255,0.84)_34%,rgba(247,251,255,0.98)_100%)]" />
 
-      <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1280px] flex-col items-center px-6 py-10 text-center lg:px-8 lg:py-14">
-        <section className="flex w-full max-w-[960px] flex-col items-center gap-6">
+      <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1280px] flex-col items-center px-6 py-6 text-center lg:px-8 lg:py-8">
+        <div className="absolute right-6 top-3 z-20 lg:right-8">
+          <button
+            type="button"
+            disabled
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-[10px] border border-black/[0.08] bg-white/92 px-3.5 text-sm text-black/62 shadow-[0_16px_30px_-24px_rgba(0,0,0,0.14)] backdrop-blur-sm"
+          >
+            <LogIn className="h-4 w-4" />
+            Login
+            <span className="text-black/44">(coming soon)</span>
+          </button>
+        </div>
+
+        <section className="flex w-full max-w-[960px] flex-col items-center gap-4">
           <div
             className="animate-[fadeSlideUp_0.65s_ease-out_both] text-sm font-normal text-black/58"
             style={{ animationDelay: "2200ms" }}
@@ -224,7 +282,7 @@ export default function LandingPage() {
             Open-source financial intelligence
           </div>
 
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-3">
             <div className="relative flex justify-center">
               <div className="pointer-events-none absolute inset-x-10 top-1/2 h-24 -translate-y-1/2 rounded-full bg-[#1080ff]/8 blur-3xl animate-[heroLogoGlow_3.2s_cubic-bezier(0.19,1,0.22,1)_both]" />
               <Image
@@ -233,7 +291,7 @@ export default function LandingPage() {
                 width={880}
                 height={250}
                 priority
-                className="relative h-auto w-full max-w-[420px] animate-[heroLogoReveal_3.1s_cubic-bezier(0.19,1,0.22,1)_both]"
+                className="relative h-auto w-full max-w-[400px] animate-[heroLogoReveal_3.1s_cubic-bezier(0.19,1,0.22,1)_both]"
               />
             </div>
 
@@ -258,10 +316,10 @@ export default function LandingPage() {
               </div>
             ) : (
               <div
-                className="animate-[fadeSlideUp_0.75s_ease-out_both] rounded-[16px] border border-black/[0.08] bg-white px-6 py-6 text-left shadow-[0_30px_60px_-38px_rgba(0,0,0,0.1)] sm:px-7"
+                className="animate-[fadeSlideUp_0.75s_ease-out_both] rounded-[16px] border border-black/[0.08] bg-white px-6 py-5 text-left shadow-[0_30px_60px_-38px_rgba(0,0,0,0.1)] sm:px-7"
                 style={{ animationDelay: "2850ms" }}
               >
-                  <div className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-3">
                     <div className="space-y-1.5">
                       <h2 className="text-2xl font-medium tracking-tight text-[#161616] sm:text-[1.8rem]">
                         Start with the agent
@@ -313,6 +371,8 @@ export default function LandingPage() {
                       ? "Open a stock workspace in one move"
                       : browseMode === "commodities"
                         ? "Open a commodity dashboard in one move"
+                        : browseMode === "macro"
+                          ? "Open a macro dashboard in one move"
                         : "Open a crypto dashboard in one move"}
                   </h2>
                   <div className="flex justify-center gap-2">
@@ -340,6 +400,17 @@ export default function LandingPage() {
                     </button>
                     <button
                       type="button"
+                      onClick={() => setBrowseMode("macro")}
+                      className={`inline-flex h-9 items-center justify-center rounded-[10px] px-3.5 text-sm transition-colors ${
+                        browseMode === "macro"
+                          ? "bg-[#1080ff] text-white"
+                          : "border border-black/[0.08] bg-white text-black/62 hover:bg-[#f4f8ff] hover:text-[#161616]"
+                      }`}
+                    >
+                      Macro
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setBrowseMode("crypto")}
                       className={`inline-flex h-9 items-center justify-center rounded-[10px] px-3.5 text-sm transition-colors ${
                         browseMode === "crypto"
@@ -363,6 +434,12 @@ export default function LandingPage() {
                     variant="hero"
                     autoFocus={!showAgent}
                   />
+                ) : browseMode === "macro" ? (
+                  <MacroSearch
+                    size="lg"
+                    variant="hero"
+                    autoFocus={!showAgent}
+                  />
                 ) : (
                   <CryptoSearch
                     size="lg"
@@ -377,10 +454,7 @@ export default function LandingPage() {
 
         {(showAgent || showBrowse) && (
           <>
-            <div className="mt-12 flex w-full max-w-[920px] flex-col gap-6">
-              {assetClassesSection}
-              {toolsSection}
-            </div>
+            <div className="mt-6 w-full max-w-[920px]">{toolsSection}</div>
             <section
               className="mt-12 grid w-full max-w-[1120px] gap-4 md:grid-cols-2 xl:grid-cols-4 animate-[fadeSlideUp_0.75s_ease-out_both]"
               style={{ animationDelay: showAgent ? "260ms" : "160ms" }}
