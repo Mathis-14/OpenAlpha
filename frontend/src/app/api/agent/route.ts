@@ -1,4 +1,5 @@
-import type { CryptoInstrument } from "@/types/api";
+import { isCommodityInstrument } from "@/lib/commodities";
+import type { CommodityInstrumentSlug, CryptoInstrument } from "@/types/api";
 import { runAgent } from "@/server/agent/service";
 
 export const runtime = "nodejs";
@@ -11,6 +12,7 @@ type AgentRouteRequest = {
   dashboard_context?: unknown;
   country?: unknown;
   crypto_instrument?: unknown;
+  commodity_instrument?: unknown;
 };
 
 function normalizeRequest(body: AgentRouteRequest) {
@@ -27,6 +29,14 @@ function normalizeRequest(body: AgentRouteRequest) {
     cryptoInstrument = body.crypto_instrument;
   }
 
+  let commodityInstrument: CommodityInstrumentSlug | undefined;
+  if (
+    typeof body.commodity_instrument === "string" &&
+    isCommodityInstrument(body.commodity_instrument.trim().toLowerCase())
+  ) {
+    commodityInstrument = body.commodity_instrument.trim().toLowerCase() as CommodityInstrumentSlug;
+  }
+
   return {
     query,
     ticker: typeof body.ticker === "string" && body.ticker.trim() ? body.ticker.trim() : undefined,
@@ -35,9 +45,12 @@ function normalizeRequest(body: AgentRouteRequest) {
         ? ("macro" as const)
         : body.dashboard_context === "crypto"
           ? ("crypto" as const)
+          : body.dashboard_context === "commodity"
+            ? ("commodity" as const)
           : undefined,
     country: body.country === "fr" ? "fr" as const : body.country === "us" ? "us" as const : undefined,
     crypto_instrument: cryptoInstrument,
+    commodity_instrument: commodityInstrument,
   };
 }
 

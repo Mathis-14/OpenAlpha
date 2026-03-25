@@ -1,4 +1,7 @@
 import type {
+  CommodityInstrumentSlug,
+  CommodityOverview,
+  CommodityRange,
   CryptoInstrument,
   CryptoOverview,
   CryptoRange,
@@ -7,6 +10,11 @@ import type {
   PeriodType,
   PricePoint,
 } from "@/types/api";
+import {
+  getCommodityOverview,
+  getCommodityPriceHistory,
+  parseCommodityInstrument,
+} from "@/server/commodities/service";
 import {
   coerceCryptoInstrument,
   getCryptoOverview,
@@ -64,12 +72,58 @@ const HISTORY_PERIODS = new Set<PeriodType>([
   "max",
 ]);
 
+const COMMODITY_HISTORY_PERIODS = new Set<CommodityRange>([
+  "1d",
+  "5d",
+  "1mo",
+  "3mo",
+  "6mo",
+  "1y",
+  "2y",
+  "5y",
+  "max",
+]);
+
+const SUPPORTED_COMMODITY_INSTRUMENTS: CommodityInstrumentSlug[] = [
+  "gold",
+  "silver",
+  "wti",
+  "brent",
+  "natural-gas",
+  "copper",
+  "gasoline",
+  "aluminum",
+  "wheat",
+  "coffee",
+  "cocoa",
+  "heating-oil",
+  "propane",
+  "coal",
+  "uranium",
+  "all-commodities-index",
+];
+
 function normalizeCryptoInstrument(value: unknown): CryptoInstrument {
   return coerceCryptoInstrument(value) ?? "BTC-PERPETUAL";
 }
 
 function normalizeCryptoRange(value: unknown): CryptoRange {
   return parseCryptoRange(typeof value === "string" ? value : null);
+}
+
+function normalizeCommodityInstrument(value: unknown): CommodityInstrumentSlug {
+  if (typeof value === "string") {
+    return parseCommodityInstrument(value);
+  }
+
+  return "gold";
+}
+
+function normalizeCommodityRange(value: unknown): CommodityRange {
+  return typeof value === "string" &&
+    COMMODITY_HISTORY_PERIODS.has(value as CommodityRange)
+    ? (value as CommodityRange)
+    : "1mo";
 }
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
@@ -88,6 +142,49 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
           },
         },
         required: ["symbol"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_commodity_overview",
+      description:
+        "Get live commodity dashboard data for a supported commodity benchmark or futures market.",
+      parameters: {
+        type: "object",
+        properties: {
+          instrument: {
+            type: "string",
+            enum: SUPPORTED_COMMODITY_INSTRUMENTS,
+            description: "Supported commodity dashboard slug",
+          },
+        },
+        required: ["instrument"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_commodity_price_history",
+      description:
+        "Get OHLCV history for a supported commodity dashboard over a selected range.",
+      parameters: {
+        type: "object",
+        properties: {
+          instrument: {
+            type: "string",
+            enum: SUPPORTED_COMMODITY_INSTRUMENTS,
+            description: "Supported commodity dashboard slug",
+          },
+          range: {
+            type: "string",
+            enum: ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"],
+            description: "Time range for commodity price history (default: 1mo)",
+          },
+        },
+        required: ["instrument"],
       },
     },
   },
@@ -312,6 +409,46 @@ function buildCryptoMetrics(
   ];
 }
 
+function buildCommodityMetrics(
+  overview: CommodityOverview,
+): Array<{ label: string; value: string }> {
+  const usesPlainNumber =
+    overview.category === "index" ||
+    overview.unit_label.toLowerCase().includes("cents");
+
+  const formatPrimaryValue = (value: number | null): string => {
+    if (value == null) {
+      return "—";
+    }
+
+    return usesPlainNumber
+      ? value.toLocaleString("en-US", {
+          maximumFractionDigits: 2,
+          minimumFractionDigits: 2,
+        })
+      : `$${value.toFixed(2)}`;
+  };
+
+  return [
+    {
+      label: overview.name,
+      value: formatPrimaryValue(overview.current_price),
+    },
+    {
+      label: "Change",
+      value: `${overview.change_percent >= 0 ? "+" : ""}${overview.change_percent.toFixed(2)}%`,
+    },
+    {
+      label: "Volume",
+      value: compactNumber(overview.volume),
+    },
+    {
+      label: "Open Interest",
+      value: compactNumber(overview.open_interest),
+    },
+  ];
+}
+
 function truncateFilings<T extends { filings?: Array<{ sections?: Array<{ content?: string }> }> }>(
   data: T,
 ): T {
@@ -428,6 +565,36 @@ export async function dispatchToolWithDisplay(
               value: formatIndicatorValue(snapshot.unemployment, 1),
             },
           ],
+        },
+      },
+    ];
+  } else if (name === "get_commodity_overview") {
+    const instrument = normalizeCommodityInstrument(argumentsObject.instrument);
+    const overview = await getCommodityOverview(instrument);
+    result = overview;
+    displays = [
+      {
+        type: "display_metric",
+        data: {
+          metrics: buildCommodityMetrics(overview),
+        },
+      },
+    ];
+  } else if (name === "get_commodity_price_history") {
+    const instrument = normalizeCommodityInstrument(argumentsObject.instrument);
+    const range = normalizeCommodityRange(argumentsObject.range);
+    const history = await getCommodityPriceHistory(instrument, range);
+    result = truncateHistory(history);
+    displays = [
+      {
+        type: "display_chart",
+        data: {
+          symbol: instrument,
+          period: range,
+          points: history.slice(-60).map((point) => ({
+            date: point.date,
+            close: point.close,
+          })),
         },
       },
     ];

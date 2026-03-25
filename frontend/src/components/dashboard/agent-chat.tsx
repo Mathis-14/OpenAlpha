@@ -6,8 +6,16 @@ import AgentAlphaIcon from "@/components/agent-alpha-icon";
 import MarkdownMessage from "@/components/markdown-message";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { streamAgent, type AgentSSE } from "@/lib/api";
+import {
+  getCommodityCategoryLabel,
+  getCommodityMeta,
+} from "@/lib/commodities";
 import { getCryptoMarketMeta } from "@/lib/crypto";
-import type { CryptoInstrument, MacroCountry } from "@/types/api";
+import type {
+  CommodityInstrumentSlug,
+  CryptoInstrument,
+  MacroCountry,
+} from "@/types/api";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -75,6 +83,7 @@ interface AgentChatProps {
   autoFocusInput?: boolean;
   macroCountry?: MacroCountry;
   cryptoInstrument?: CryptoInstrument;
+  commodityInstrument?: CommodityInstrumentSlug;
 }
 
 const TICKER_SUGGESTIONS = [
@@ -96,6 +105,7 @@ const GENERAL_SUGGESTIONS = [
 const LANDING_SUGGESTIONS = [
   "What's Nvidia's current price trend?",
   "What are the latest U.S. inflation data?",
+  "What's the latest trend in gold?",
   "How is Bitcoin performing this week?",
 ];
 
@@ -125,12 +135,25 @@ const CRYPTO_SUGGESTIONS: Record<CryptoInstrument, string[]> = {
   ],
 };
 
+function getCommoditySuggestions(
+  instrument: CommodityInstrumentSlug,
+): string[] {
+  const commodityName = getCommodityMeta(instrument).name;
+
+  return [
+    `What's the current ${commodityName} price trend?`,
+    `How is ${commodityName} trading versus its 52-week range?`,
+    `Summarize ${commodityName} price action over the last month.`,
+  ];
+}
+
 export default function AgentChat({
   ticker,
   variant = "dashboard",
   autoFocusInput = false,
   macroCountry,
   cryptoInstrument,
+  commodityInstrument,
 }: AgentChatProps) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -144,6 +167,9 @@ export default function AgentChat({
   const landingHasConversation = isLanding && (messages.length > 0 || streaming);
   const cryptoMeta = cryptoInstrument
     ? getCryptoMarketMeta(cryptoInstrument)
+    : null;
+  const commodityMeta = commodityInstrument
+    ? getCommodityMeta(commodityInstrument)
     : null;
 
   function scrollToBottom() {
@@ -179,9 +205,16 @@ export default function AgentChat({
         {
           query: query.trim(),
           ticker,
-          dashboard_context: cryptoInstrument ? "crypto" : macroCountry ? "macro" : undefined,
+          dashboard_context: commodityInstrument
+            ? "commodity"
+            : cryptoInstrument
+              ? "crypto"
+              : macroCountry
+                ? "macro"
+                : undefined,
           country: macroCountry,
           crypto_instrument: cryptoInstrument,
+          commodity_instrument: commodityInstrument,
         },
         controller.signal,
       )) {
@@ -249,6 +282,8 @@ export default function AgentChat({
 
   const suggestions = ticker
     ? TICKER_SUGGESTIONS
+    : commodityInstrument
+      ? getCommoditySuggestions(commodityInstrument)
     : cryptoInstrument
       ? CRYPTO_SUGGESTIONS[cryptoInstrument]
     : macroCountry
@@ -260,6 +295,8 @@ export default function AgentChat({
 
   const placeholderText = ticker
     ? `Ask about ${ticker}...`
+    : commodityInstrument
+      ? `Ask about ${commodityMeta?.name ?? commodityInstrument}...`
     : cryptoInstrument
       ? `Ask about ${cryptoMeta?.symbol ?? cryptoInstrument}...`
     : macroCountry
@@ -274,6 +311,14 @@ export default function AgentChat({
       </span>
       . The agent will fetch real data before answering.
     </>
+  ) : commodityInstrument && commodityMeta ? (
+    <>
+      Ask about{" "}
+      <span className={isLanding ? "font-medium text-[#161616]" : "font-medium text-foreground"}>
+        {commodityMeta.name}
+      </span>
+      . Alpha will use live {getCommodityCategoryLabel(commodityMeta.category).toLowerCase()} market data from this commodity dashboard before answering.
+    </>
   ) : cryptoInstrument && cryptoMeta ? (
     `Ask about ${cryptoMeta.name}. Alpha will use live Deribit market data from this ${cryptoMeta.detailLabel.toLowerCase()} dashboard before answering.`
   ) : macroCountry ? (
@@ -281,9 +326,10 @@ export default function AgentChat({
       macroCountry === "fr" ? "France" : "U.S."
     } inflation, rates, growth, or labor data. Alpha will use the macro dashboard context before answering.`
   ) : (
-    "Ask about any stock, market trends, or economic indicators. The agent will fetch real data before answering."
+    "Ask about stocks, commodities, macro trends, or supported crypto markets. The agent will fetch real data before answering."
   );
-  const showLandingIntro = !isLanding || Boolean(ticker);
+  const showLandingIntro =
+    !isLanding || Boolean(ticker || commodityInstrument);
 
   return (
     <Card
@@ -314,7 +360,7 @@ export default function AgentChat({
                 Ask Alpha
               </CardTitle>
               <p className="mx-auto max-w-[48rem] text-sm leading-6 font-light text-black/68 sm:text-[15px]">
-                Ask about stocks, macro trends, or supported crypto markets, then open a dedicated dashboard when you need to go deeper.
+                Ask about stocks, commodities, macro trends, or supported crypto markets, then open a dedicated dashboard when you need to go deeper.
               </p>
             </div>
           </div>
@@ -325,7 +371,9 @@ export default function AgentChat({
               Alpha
             </CardTitle>
             <p className="text-sm font-light text-black/62">
-              {cryptoInstrument && cryptoMeta
+              {commodityInstrument && commodityMeta
+                ? `Ask about ${commodityMeta.name}. Alpha will stay grounded in this commodity dashboard.`
+                : cryptoInstrument && cryptoMeta
                 ? `Ask about ${cryptoMeta.symbol}. Alpha will stay grounded in Deribit market data from this ${cryptoMeta.detailLabel.toLowerCase()} dashboard.`
                 : macroCountry
                 ? `Ask about ${macroCountry === "fr" ? "France" : "U.S."} macro data. Alpha will use the dashboard context before answering.`
@@ -408,6 +456,9 @@ export default function AgentChat({
                 router.push(country === "fr" ? "/macro?country=fr" : "/macro")
               }
               onOpenCrypto={(instrument) => router.push(`/crypto/${instrument}`)}
+              onOpenCommodity={(instrument) =>
+                router.push(`/commodities/${instrument}`)
+              }
             />
           ))}
         </div>
@@ -574,6 +625,39 @@ function getSuggestedCryptoInstrument(
     : null;
 }
 
+function getSuggestedCommodityInstrument(
+  entries: ChatEntry[],
+): CommodityInstrumentSlug | null {
+  const instruments = Array.from(
+    new Set(
+      entries.flatMap((entry) => {
+        if (
+          entry.type !== "tool_call" ||
+          (entry.name !== "get_commodity_overview" &&
+            entry.name !== "get_commodity_price_history")
+        ) {
+          return [];
+        }
+
+        const candidate = entry.arguments.instrument;
+        if (typeof candidate !== "string") {
+          return [];
+        }
+
+        try {
+          return [getCommodityMeta(candidate as CommodityInstrumentSlug).instrument];
+        } catch {
+          return [];
+        }
+      }),
+    ),
+  );
+
+  return instruments.length === 1
+    ? (instruments[0] as CommodityInstrumentSlug)
+    : null;
+}
+
 function getSuggestedMacroCountry(entries: ChatEntry[]): MacroCountry | null {
   const macroCalls = entries.filter(
     (entry): entry is ToolCallEntry =>
@@ -610,6 +694,7 @@ function MessageBubble({
   onOpenTicker,
   onOpenMacro,
   onOpenCrypto,
+  onOpenCommodity,
 }: {
   message: ChatMessage;
   streaming: boolean;
@@ -617,6 +702,7 @@ function MessageBubble({
   onOpenTicker: (ticker: string) => void;
   onOpenMacro: (country: MacroCountry) => void;
   onOpenCrypto: (instrument: CryptoInstrument) => void;
+  onOpenCommodity: (instrument: CommodityInstrumentSlug) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -651,12 +737,19 @@ function MessageBubble({
   );
   const suggestedTicker =
     variant === "landing" ? getSuggestedTicker(entries) : null;
-  const suggestedCryptoInstrument =
+  const suggestedCommodityInstrument =
     variant === "landing" && !suggestedTicker
+      ? getSuggestedCommodityInstrument(entries)
+      : null;
+  const suggestedCryptoInstrument =
+    variant === "landing" && !suggestedTicker && !suggestedCommodityInstrument
       ? getSuggestedCryptoInstrument(entries)
       : null;
   const suggestedMacroCountry =
-    variant === "landing" && !suggestedTicker && !suggestedCryptoInstrument
+    variant === "landing" &&
+    !suggestedTicker &&
+    !suggestedCommodityInstrument &&
+    !suggestedCryptoInstrument
       ? getSuggestedMacroCountry(entries)
       : null;
 
@@ -675,6 +768,14 @@ function MessageBubble({
           symbol={suggestedTicker}
           variant={variant}
           onOpen={() => onOpenTicker(suggestedTicker)}
+        />
+      )}
+
+      {suggestedCommodityInstrument && (
+        <CommodityDashboardSuggestionCard
+          instrument={suggestedCommodityInstrument}
+          variant={variant}
+          onOpen={() => onOpenCommodity(suggestedCommodityInstrument)}
         />
       )}
 
@@ -745,6 +846,60 @@ function MessageBubble({
           {toolEntries.length > 0 ? "Processing..." : "Thinking..."}
         </div>
       )}
+    </div>
+  );
+}
+
+function CommodityDashboardSuggestionCard({
+  instrument,
+  onOpen,
+  variant,
+}: {
+  instrument: CommodityInstrumentSlug;
+  onOpen: () => void;
+  variant: "dashboard" | "landing";
+}) {
+  const meta = getCommodityMeta(instrument);
+
+  return (
+    <div
+      className={cn(
+        "rounded-[14px] p-3 text-left",
+        variant === "landing" || variant === "dashboard"
+          ? "border border-black/[0.08] bg-[#f4f8ff]"
+          : "border border-white/[0.08] bg-white/[0.03]",
+      )}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <p
+            className={cn(
+              "inline-flex items-center gap-2 text-[11px] font-normal uppercase tracking-[0.2em]",
+              variant === "landing" || variant === "dashboard" ? "text-black/54" : "text-white/52",
+            )}
+          >
+            <LayoutDashboard className="h-3.5 w-3.5" />
+            Commodity Dashboard Ready
+          </p>
+          <p className={cn("text-sm", variant === "landing" || variant === "dashboard" ? "text-black/76" : "text-white/78")}>
+            Open <span className="font-medium">{meta.name}</span> for price action,
+            benchmark context, and a dedicated commodity agent.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className={cn(
+            "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[10px] px-4 text-sm font-medium transition-colors",
+            variant === "landing" || variant === "dashboard"
+              ? "border border-black/[0.08] bg-[#1080ff] text-white hover:bg-[#006fe6]"
+              : "border border-white/[0.1] bg-white text-black hover:bg-white/92",
+          )}
+        >
+          Open {meta.short_label}
+          <ArrowUpRight className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }

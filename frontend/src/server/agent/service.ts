@@ -1,4 +1,8 @@
-import type { CryptoInstrument, MacroCountry } from "@/types/api";
+import type {
+  CommodityInstrumentSlug,
+  CryptoInstrument,
+  MacroCountry,
+} from "@/types/api";
 import { SYSTEM_PROMPT } from "@/server/agent/prompt";
 import { TOOL_DEFINITIONS, dispatchToolWithDisplay } from "@/server/agent/tools";
 
@@ -13,9 +17,10 @@ const TOOL_REQUIRED_MESSAGE =
 type AgentRequest = {
   query: string;
   ticker?: string | null;
-  dashboard_context?: "macro" | "crypto" | null;
+  dashboard_context?: "macro" | "crypto" | "commodity" | null;
   country?: MacroCountry | null;
   crypto_instrument?: CryptoInstrument | null;
+  commodity_instrument?: CommodityInstrumentSlug | null;
 };
 
 type MistralToolCall = {
@@ -73,12 +78,22 @@ function getMistralModel(): string {
 function buildUserContent(
   query: string,
   ticker: string | null | undefined,
-  dashboardContext: "macro" | "crypto" | null | undefined,
+  dashboardContext: "macro" | "crypto" | "commodity" | null | undefined,
   country: MacroCountry | null | undefined,
   cryptoInstrument: CryptoInstrument | null | undefined,
+  commodityInstrument: CommodityInstrumentSlug | null | undefined,
 ): string {
   if (ticker) {
     return `${query}\n\n[Context: the user is asking about ticker ${ticker.toUpperCase()}]`;
+  }
+
+  if (dashboardContext === "commodity" && commodityInstrument) {
+    return (
+      `${query}\n\n` +
+      `[Context: the user is on the commodity dashboard for ${commodityInstrument}. ` +
+      `Use get_commodity_overview and get_commodity_price_history for ${commodityInstrument}. ` +
+      "Keep the answer grounded in this commodity dashboard and its live futures market data.]"
+    );
   }
 
   if (dashboardContext === "crypto" && cryptoInstrument) {
@@ -311,6 +326,7 @@ export async function* runAgent(
         request.dashboard_context,
         request.country,
         request.crypto_instrument,
+        request.commodity_instrument,
       ),
     },
   ];
