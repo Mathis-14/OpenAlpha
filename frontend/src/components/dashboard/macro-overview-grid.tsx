@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatUtcDate } from "@/lib/date-format";
 import type {
   MacroCountry,
   MacroIndicator,
@@ -122,14 +123,7 @@ export default function MacroOverviewGrid({
             <CardContent className="flex flex-1 flex-col justify-end space-y-1.5 pt-0">
               <p className="text-sm font-light text-black/62">{indicator.name}</p>
               <div className="flex items-center justify-between text-xs text-black/48">
-                <span>
-                  Updated{" "}
-                  {new Date(indicator.latest_date).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </span>
+                <span>Updated {formatUtcDate(indicator.latest_date)}</span>
                 {delta && (
                   <span className="rounded-full bg-[#f4f8ff] px-2 py-0.5 text-[#161616]">
                     {delta}

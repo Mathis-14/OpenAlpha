@@ -6,6 +6,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { formatUtcDate } from "@/lib/date-format";
 import type { Filing } from "@/types/api";
 import { AlertTriangle, ChevronRight, ExternalLink, FileText } from "lucide-react";
 
@@ -74,11 +75,7 @@ function FilingItem({ filing }: { filing: Filing }) {
         <div className="min-w-0 flex-1">
           <span className="font-medium text-[#161616]">{filing.form_type}</span>
           <span className="ml-2 text-black/52">
-            {new Date(filing.filing_date).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
+            {formatUtcDate(filing.filing_date)}
           </span>
         </div>
         <a
