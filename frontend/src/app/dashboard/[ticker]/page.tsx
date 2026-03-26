@@ -12,6 +12,7 @@ import FilingsPanel from "@/components/dashboard/filings-panel";
 import AgentChat from "@/components/dashboard/agent-chat";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import DownloadDataLink from "@/components/download-data-link";
+import RequestQuotaBadge from "@/components/request-quota-badge";
 import { buildDataPageHref } from "@/lib/data-export";
 import { ServiceError } from "@/server/shared/errors";
 import { getFilings } from "@/server/filings/service";
@@ -148,6 +149,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
               className="h-8 w-auto"
             />
           </Link>
+          <RequestQuotaBadge />
           <div className="max-w-[360px] flex-1">
             <TickerSearch variant="dashboard" />
           </div>

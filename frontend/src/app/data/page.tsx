@@ -5,6 +5,7 @@ import AgentChat from "@/components/dashboard/agent-chat";
 import DataQuickLinks from "@/components/data-quick-links";
 import { Badge } from "@/components/ui/badge";
 import DataExportTool from "@/components/data-export-tool";
+import RequestQuotaBadge from "@/components/request-quota-badge";
 import {
   getDefaultAssetForClass,
   getDefaultDateRange,
@@ -54,15 +55,18 @@ export default async function DataPage({
 
       <header className="sticky top-0 z-40 border-b border-black/[0.08] bg-white/88 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-4 px-6 py-3">
-          <Link href="/" className="shrink-0 transition-opacity hover:opacity-80">
-            <Image
-              src="/openalpha_logo_light.svg"
-              alt="OpenAlpha"
-              width={680}
-              height={200}
-              className="h-8 w-auto"
-            />
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link href="/" className="shrink-0 transition-opacity hover:opacity-80">
+              <Image
+                src="/openalpha_logo_light.svg"
+                alt="OpenAlpha"
+                width={680}
+                height={200}
+                className="h-8 w-auto"
+              />
+            </Link>
+            <RequestQuotaBadge />
+          </div>
           <Badge
             variant="outline"
             className="border-black/[0.08] bg-[#f4f8ff] font-mono text-sm text-[#161616]"

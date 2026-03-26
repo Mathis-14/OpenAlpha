@@ -3,6 +3,7 @@ import Link from "next/link";
 import LandingSpotlight from "@/components/landing-spotlight";
 import CommoditySearch from "@/components/commodity-search";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import RequestQuotaBadge from "@/components/request-quota-badge";
 import {
   SUPPORTED_COMMODITIES,
   getCommodityCategoryLabel,
@@ -19,15 +20,18 @@ export default function CommoditiesPage() {
 
       <header className="sticky top-0 z-40 border-b border-black/[0.08] bg-white/88 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-4 px-6 py-3">
-          <Link href="/" className="shrink-0 transition-opacity hover:opacity-80">
-            <Image
-              src="/openalpha_logo_light.svg"
-              alt="OpenAlpha"
-              width={680}
-              height={200}
-              className="h-8 w-auto"
-            />
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link href="/" className="shrink-0 transition-opacity hover:opacity-80">
+              <Image
+                src="/openalpha_logo_light.svg"
+                alt="OpenAlpha"
+                width={680}
+                height={200}
+                className="h-8 w-auto"
+              />
+            </Link>
+            <RequestQuotaBadge />
+          </div>
           <div className="rounded-full border border-black/[0.08] bg-[#f4f8ff] px-3 py-1 text-sm text-[#161616]">
             Commodities · Explore
           </div>

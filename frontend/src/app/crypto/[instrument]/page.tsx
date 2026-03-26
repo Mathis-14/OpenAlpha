@@ -8,6 +8,7 @@ import CryptoOverviewGrid from "@/components/dashboard/crypto-overview-grid";
 import CryptoPriceChart from "@/components/dashboard/crypto-price-chart";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import DownloadDataLink from "@/components/download-data-link";
+import RequestQuotaBadge from "@/components/request-quota-badge";
 import {
   getCryptoMarketData,
   parseCryptoInstrument,
@@ -179,6 +180,7 @@ export default async function CryptoInstrumentPage({
                 className="h-8 w-auto"
               />
             </Link>
+            <RequestQuotaBadge />
             <div className="flex flex-wrap gap-2">
               {NAV_INSTRUMENTS.map((option) => {
                 const optionMeta = getCryptoMarketMeta(option);

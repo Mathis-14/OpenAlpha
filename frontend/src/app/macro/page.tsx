@@ -7,6 +7,7 @@ import LandingSpotlight from "@/components/landing-spotlight";
 import AgentChat from "@/components/dashboard/agent-chat";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import DownloadDataLink from "@/components/download-data-link";
+import RequestQuotaBadge from "@/components/request-quota-badge";
 import MacroChart from "@/components/dashboard/macro-chart";
 import MacroOverviewGrid from "@/components/dashboard/macro-overview-grid";
 import { buildDataPageHref } from "@/lib/data-export";
@@ -165,6 +166,7 @@ export default async function MacroPage({
               className="h-8 w-auto"
             />
           </Link>
+          <RequestQuotaBadge />
           <div className="max-w-[360px] flex-1">
             <TickerSearch variant="dashboard" />
           </div>

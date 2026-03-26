@@ -21,6 +21,8 @@ import type {
   PeriodType,
   PricePoint,
   TickerOverview,
+  UnlockQuotaRequest,
+  UsageQuota,
 } from "@/types/api";
 
 class ApiError extends Error {
@@ -30,6 +32,16 @@ class ApiError extends Error {
   ) {
     super(message);
     this.name = "ApiError";
+  }
+}
+
+class QuotaExhaustedError extends ApiError {
+  constructor(
+    public remaining: number,
+    message = "Request quota exhausted",
+  ) {
+    super(429, message);
+    this.name = "QuotaExhaustedError";
   }
 }
 
@@ -159,11 +171,66 @@ export async function searchTickers(
   return res.json() as Promise<SearchResult[]>;
 }
 
+// ── Usage Quota ────────────────────────────────────────────────────────────
+
+export function getUsageQuota(): Promise<UsageQuota> {
+  return fetchJson("/api/usage");
+}
+
+export async function unlockUsageQuota(
+  payload: UnlockQuotaRequest,
+): Promise<UsageQuota> {
+  const res = await fetch("/api/usage/unlock", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    let parsed: { error?: string; retry_after_seconds?: unknown } | null = null;
+    try {
+      parsed = body
+        ? (JSON.parse(body) as {
+            error?: string;
+            retry_after_seconds?: unknown;
+          })
+        : null;
+    } catch {
+      parsed = null;
+    }
+
+    if (res.status === 429 && parsed?.error === "unlock_rate_limited") {
+      const retryAfterSeconds =
+        typeof parsed.retry_after_seconds === "number"
+          ? parsed.retry_after_seconds
+          : null;
+      throw new ApiError(
+        429,
+        retryAfterSeconds != null
+          ? `unlock_rate_limited:${retryAfterSeconds}`
+          : "unlock_rate_limited",
+      );
+    }
+
+    if (res.status === 401 && parsed?.error === "invalid_password") {
+      throw new ApiError(401, "invalid_password");
+    }
+
+    throw new ApiError(res.status, body || res.statusText);
+  }
+
+  return res.json() as Promise<UsageQuota>;
+}
+
 // ── Agent SSE ────────────────────────────────────────────────────────────────
 
 export async function* streamAgent(
   request: AgentRequest,
   signal?: AbortSignal,
+  options?: {
+    onAccepted?: (remaining: number | null) => void;
+  },
 ): AsyncGenerator<AgentEvent> {
   const res = await fetch("/api/agent", {
     method: "POST",
@@ -174,8 +241,25 @@ export async function* streamAgent(
 
   if (!res.ok || !res.body) {
     const body = await res.text().catch(() => "");
+    let parsed: { error?: string; remaining?: unknown } | null = null;
+    try {
+      parsed = body ? (JSON.parse(body) as { error?: string; remaining?: unknown }) : null;
+    } catch {
+      parsed = null;
+    }
+
+    if (res.status === 429 && parsed?.error === "quota_exhausted") {
+      throw new QuotaExhaustedError(
+        typeof parsed.remaining === "number" ? parsed.remaining : 0,
+      );
+    }
+
     throw new ApiError(res.status, body || res.statusText);
   }
+
+  const remainingHeader = res.headers.get("x-requests-remaining");
+  const remaining = remainingHeader ? Number.parseInt(remainingHeader, 10) : Number.NaN;
+  options?.onAccepted?.(Number.isFinite(remaining) ? remaining : null);
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -213,4 +297,5 @@ export async function* streamAgent(
 }
 
 export { ApiError };
+export { QuotaExhaustedError };
 export type { AgentEvent as AgentSSE } from "@/types/api";
