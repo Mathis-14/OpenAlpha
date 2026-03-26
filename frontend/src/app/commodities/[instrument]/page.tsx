@@ -134,36 +134,41 @@ export default async function CommodityInstrumentPage({
       <div className="pointer-events-none absolute inset-0 z-[2] bg-[linear-gradient(180deg,rgba(255,255,255,0.6),rgba(247,251,255,0.84)_34%,rgba(247,251,255,0.98)_100%)]" />
 
       <header className="sticky top-0 z-40 border-b border-black/[0.08] bg-white/88 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-4 px-6 py-3">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="shrink-0 transition-opacity hover:opacity-80">
-              <Image
-                src="/openalpha_logo_light.svg"
-                alt="OpenAlpha"
-                width={680}
-                height={200}
-                className="h-8 w-auto"
+        <div className="mx-auto flex max-w-[1280px] flex-col gap-3 px-6 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-4">
+              <Link href="/" className="shrink-0 transition-opacity hover:opacity-80">
+                <Image
+                  src="/openalpha_logo_light.svg"
+                  alt="OpenAlpha"
+                  width={680}
+                  height={200}
+                  className="h-8 w-auto"
+                />
+              </Link>
+              <RequestQuotaBadge />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <Badge
+                variant="outline"
+                className="border-black/[0.08] bg-[#f4f8ff] font-mono text-sm text-[#161616]"
+              >
+                Commodities · {marketMeta.short_label}
+              </Badge>
+              <DownloadDataLink
+                href={buildDataPageHref({
+                  asset_class: "commodity",
+                  asset: instrument,
+                })}
               />
-            </Link>
-            <RequestQuotaBadge />
+            </div>
+          </div>
+
+          <div className="min-w-0">
             <CommodityNav
               currentInstrument={instrument}
               instruments={SUPPORTED_COMMODITIES}
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Badge
-              variant="outline"
-              className="border-black/[0.08] bg-[#f4f8ff] font-mono text-sm text-[#161616]"
-            >
-              Commodities · {marketMeta.short_label}
-            </Badge>
-            <DownloadDataLink
-              href={buildDataPageHref({
-                asset_class: "commodity",
-                asset: instrument,
-              })}
             />
           </div>
         </div>

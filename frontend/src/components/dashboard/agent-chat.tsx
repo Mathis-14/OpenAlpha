@@ -554,50 +554,62 @@ export default function AgentChat({
               : "flex gap-2 border-t border-black/[0.08] pt-3",
           )}
         >
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              autoFocus={autoFocusInput}
-              placeholder={placeholderText}
-              disabled={streaming}
-              className={cn(
-                "w-full border outline-none transition-colors placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-primary/50 disabled:opacity-50",
-                isLanding
-                  ? "h-10 rounded-[10px] border-black/[0.08] bg-[#f4f8ff] px-4 text-sm text-[#161616] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
-                  : "h-10 rounded-[10px] border-black/[0.08] bg-[#f4f8ff] px-4 text-sm text-[#161616] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]",
-              )}
-            />
-          </div>
           {streaming ? (
-            <button
-              type="button"
-              onClick={handleStop}
-              className={cn(
-                "inline-flex shrink-0 items-center justify-center gap-1.5 font-medium transition-colors",
-                isLanding
-                  ? "h-10 rounded-[10px] bg-destructive/10 px-4 text-sm text-destructive hover:bg-destructive/20"
-                  : "h-10 rounded-[10px] bg-destructive/10 px-4 text-sm text-destructive hover:bg-destructive/20",
-              )}
-            >
-              Stop
-            </button>
+            <>
+              <div
+                className={cn(
+                  "min-w-0 flex-1 rounded-[12px] border border-black/[0.08] bg-[#f4f8ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]",
+                  "focus-within:border-[#1080ff]/36 focus-within:ring-4 focus-within:ring-[#1080ff]/12",
+                )}
+              >
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  autoFocus={autoFocusInput}
+                  placeholder={placeholderText}
+                  disabled={streaming}
+                  className="h-10 w-full rounded-[12px] border-0 bg-transparent px-4 text-sm text-[#161616] outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleStop}
+                className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-[10px] bg-destructive/10 px-4 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20"
+              >
+                Stop
+              </button>
+            </>
           ) : (
-            <button
-              type="submit"
-              aria-disabled={!input.trim() || undefined}
-              className={cn(
-                "inline-flex shrink-0 items-center justify-center gap-1.5 font-medium transition-colors",
-                isLanding
-                  ? "h-10 rounded-[10px] bg-[#1080ff] px-4 text-sm text-white shadow-none hover:bg-[#006fe6]"
-                  : "h-10 rounded-[10px] bg-[#1080ff] px-4 text-sm text-white hover:bg-[#006fe6]",
-                !input.trim() && "pointer-events-none opacity-50",
-              )}
-            >
-              <Send className="h-4 w-4" />
-              {isLanding && <span>Ask</span>}
-            </button>
+            <>
+              <div
+                className={cn(
+                  "min-w-0 flex-1 rounded-[12px] border border-black/[0.08] bg-[#f4f8ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]",
+                  "focus-within:border-[#1080ff]/36 focus-within:ring-4 focus-within:ring-[#1080ff]/12",
+                )}
+              >
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  autoFocus={autoFocusInput}
+                  placeholder={placeholderText}
+                  disabled={streaming}
+                  className="h-10 w-full rounded-[12px] border-0 bg-transparent px-4 text-sm text-[#161616] outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
+                />
+              </div>
+              <button
+                type="submit"
+                aria-disabled={!input.trim() || undefined}
+                className={cn(
+                  "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-[10px] bg-[#1080ff] px-4 text-sm font-medium text-white transition-colors hover:bg-[#006fe6]",
+                  !input.trim() && "pointer-events-none opacity-50",
+                )}
+              >
+                <Send className="h-4 w-4" />
+                {isLanding && <span>Ask</span>}
+              </button>
+            </>
           )}
         </form>
       </CardContent>

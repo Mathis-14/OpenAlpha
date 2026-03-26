@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   CandlestickSeries,
   ColorType,
   createChart,
   type IChartApi,
+  type ISeriesApi,
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
@@ -44,6 +45,7 @@ export default function CommodityPriceChart({
 }: CommodityPriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const [range, setRange] = useState<CommodityRange>(initialRange);
   const [cache, setCache] = useState<Record<string, PricePoint[]>>({
     [initialRange]: initialData,
@@ -58,6 +60,13 @@ export default function CommodityPriceChart({
       chart.timeScale().fitContent();
     });
   }
+
+  useEffect(() => {
+    setRange(initialRange);
+    setCache({ [initialRange]: initialData });
+    setLoading(false);
+    setError(null);
+  }, [instrument, initialData, initialRange]);
 
   async function handleRangeChange(nextRange: CommodityRange) {
     if (nextRange === range) {
@@ -83,7 +92,7 @@ export default function CommodityPriceChart({
     }
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) {
       return;
@@ -122,18 +131,8 @@ export default function CommodityPriceChart({
       wickDownColor: "#ef4444",
     });
 
-    candleSeries.setData(
-      data.map((point) => ({
-        time: toChartTime(point.date),
-        open: point.open,
-        high: point.high,
-        low: point.low,
-        close: point.close,
-      })) as Parameters<typeof candleSeries.setData>[0],
-    );
-    fitChartToData(chart);
-
     chartRef.current = chart;
+    seriesRef.current = candleSeries;
 
     const ro = new ResizeObserver(() => {
       chart.applyOptions({
@@ -146,14 +145,42 @@ export default function CommodityPriceChart({
 
     return () => {
       ro.disconnect();
+      seriesRef.current = null;
       chart.remove();
       chartRef.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) {
+      return;
+    }
+
+    chart.applyOptions({
+      timeScale: {
+        borderColor: "rgba(0,0,0,0.08)",
+        timeVisible: range === "1d" || range === "5d",
+        minimumHeight: 28,
+      },
+    });
+
+    series.setData(
+      data.map((point) => ({
+        time: toChartTime(point.date),
+        open: point.open,
+        high: point.high,
+        low: point.low,
+        close: point.close,
+      })) as Parameters<typeof series.setData>[0],
+    );
+    fitChartToData(chart);
   }, [data, range]);
 
   return (
     <Card
-      className={`overflow-visible rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] ${
+      className={`rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)] ${
         fillHeight ? "flex h-full min-h-0 flex-col" : ""
       }`}
     >
@@ -177,7 +204,7 @@ export default function CommodityPriceChart({
           </div>
         </div>
       </CardHeader>
-      <CardContent className={fillHeight ? "flex min-h-0 flex-1 flex-col pt-0 pb-3" : "pt-0 pb-3"}>
+      <CardContent className={fillHeight ? "flex min-h-0 flex-1 flex-col pt-0" : "pt-0"}>
         <div className={`relative space-y-3 ${fillHeight ? "flex min-h-0 flex-1 flex-col" : ""}`}>
           {loading && (
             <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[14px] bg-white/85 backdrop-blur-sm">
@@ -186,7 +213,7 @@ export default function CommodityPriceChart({
           )}
           <div
             ref={containerRef}
-            className={fillHeight ? "min-h-[248px] flex-1 w-full" : "h-[320px] w-full"}
+            className={fillHeight ? "min-h-[252px] flex-1 w-full" : "h-[320px] w-full"}
           />
           {error && <p className="text-sm text-[#b93828]">{error}</p>}
         </div>
