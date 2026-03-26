@@ -1,17 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import RelativeTime from "@/components/relative-time";
 import type { NewsArticle } from "@/types/api";
 import { AlertTriangle, ExternalLink } from "lucide-react";
-
-function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return "";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
 
 export default function NewsFeed({
   articles,
@@ -76,7 +66,12 @@ export default function NewsFeed({
                     </p>
                     <p className="mt-1 text-xs text-black/46">
                       {a.source}
-                      {a.published && ` · ${timeAgo(a.published)}`}
+                      {a.published && (
+                        <>
+                          {" · "}
+                          <RelativeTime value={a.published} />
+                        </>
+                      )}
                     </p>
                   </div>
                   <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-black/32 transition-colors group-hover:text-[#1080ff]" />

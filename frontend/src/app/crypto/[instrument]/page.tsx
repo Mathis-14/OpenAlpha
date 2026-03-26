@@ -14,6 +14,7 @@ import {
   parseCryptoInstrument,
 } from "@/server/crypto/service";
 import { getCryptoMarketMeta } from "@/lib/crypto";
+import { formatUtcDate } from "@/lib/date-format";
 import { buildDataPageHref } from "@/lib/data-export";
 import { ServiceError } from "@/server/shared/errors";
 import type { CryptoInstrument, CryptoRange } from "@/types/api";
@@ -39,11 +40,7 @@ function formatTimestamp(value: number | null): string {
     return "—";
   }
 
-  return new Date(value).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
+  return formatUtcDate(value);
 }
 
 export default async function CryptoInstrumentPage({

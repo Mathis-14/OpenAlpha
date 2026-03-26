@@ -9,6 +9,7 @@ import {
   type IChartApi,
 } from "lightweight-charts";
 import { getMacroSeries } from "@/lib/api";
+import { formatUtcDate } from "@/lib/date-format";
 import type {
   MacroCountry,
   MacroHistoryRange,
@@ -238,14 +239,7 @@ export default function MacroChart({
         </div>
 
         <div className="flex flex-col gap-1 text-xs text-black/48 sm:flex-row sm:items-center sm:justify-between">
-          <span>
-            Latest release:{" "}
-            {new Date(data.latest_date).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
-          </span>
+          <span>Latest release: {formatUtcDate(data.latest_date)}</span>
           <span>Source: Federal Reserve Economic Data (FRED)</span>
         </div>
 
