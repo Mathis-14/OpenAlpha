@@ -22,6 +22,7 @@ import CommoditySearch from "@/components/commodity-search";
 import CryptoSearch from "@/components/crypto-search";
 import MacroSearch from "@/components/macro-search";
 import AgentChat from "@/components/dashboard/agent-chat";
+import RequestQuotaBadge from "@/components/request-quota-badge";
 
 const FEATURE_CARDS = [
   {
@@ -262,6 +263,9 @@ export default function LandingPage() {
       <div className="pointer-events-none absolute inset-0 z-[2] bg-[linear-gradient(180deg,rgba(255,255,255,0.6),rgba(247,251,255,0.84)_34%,rgba(247,251,255,0.98)_100%)]" />
 
       <main className="relative z-10 mx-auto flex min-h-screen w-full max-w-[1280px] flex-col items-center px-6 py-6 text-center lg:px-8 lg:py-8">
+        <div className="absolute left-6 top-3 z-20 lg:left-8">
+          <RequestQuotaBadge />
+        </div>
         <div className="absolute right-6 top-3 z-20 lg:right-8">
           <button
             type="button"

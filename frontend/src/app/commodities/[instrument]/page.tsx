@@ -9,6 +9,7 @@ import AgentChat from "@/components/dashboard/agent-chat";
 import CommodityOverviewGrid from "@/components/dashboard/commodity-overview-grid";
 import CommodityPriceChart from "@/components/dashboard/commodity-price-chart";
 import DownloadDataLink from "@/components/download-data-link";
+import RequestQuotaBadge from "@/components/request-quota-badge";
 import { buildDataPageHref } from "@/lib/data-export";
 import {
   getCommodityCategoryLabel,
@@ -144,6 +145,7 @@ export default async function CommodityInstrumentPage({
                 className="h-8 w-auto"
               />
             </Link>
+            <RequestQuotaBadge />
             <CommodityNav
               currentInstrument={instrument}
               instruments={SUPPORTED_COMMODITIES}
