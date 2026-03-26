@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
@@ -492,14 +493,12 @@ export default function LandingPage() {
             OpenAlpha combines prices, fundamentals, filings, macro indicators,
             and a Mistral-powered agent.
           </p>
-          <a
-            href="https://github.com/Mathis-14/OpenAlpha"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="transition-colors hover:text-black"
+          <Link
+            href="/about"
+            className="inline-flex h-9 items-center justify-center rounded-[10px] border border-black/[0.08] bg-white px-3.5 text-sm text-black/62 transition-colors hover:bg-[#f4f8ff] hover:text-[#161616]"
           >
-            View on GitHub
-          </a>
+            About
+          </Link>
         </footer>
       </main>
     </div>
