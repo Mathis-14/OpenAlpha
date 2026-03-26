@@ -205,6 +205,17 @@ export interface DataExportQuery {
   end_date: string;
 }
 
+// ── Usage Quota ────────────────────────────────────────────────────────────
+
+export interface UsageQuota {
+  limit: number;
+  remaining: number;
+}
+
+export interface UnlockQuotaRequest {
+  password: string;
+}
+
 // ── SEC Filings (EDGAR) ─────────────────────────────────────────────────────
 
 export interface FilingSection {

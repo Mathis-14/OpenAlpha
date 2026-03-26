@@ -1,6 +1,7 @@
 import { isCommodityInstrument } from "@/lib/commodities";
 import type { CommodityInstrumentSlug, CryptoInstrument } from "@/types/api";
 import { runAgent } from "@/server/agent/service";
+import { decrementQuota } from "@/server/usage/quota";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,6 +70,33 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "invalid_request" }, { status: 422 });
   }
 
+  let quota;
+  try {
+    quota = decrementQuota(request.headers.get("cookie"));
+  } catch (error) {
+    return Response.json(
+      {
+        error: "quota_unavailable",
+        detail: (error as Error).message || "Quota service unavailable",
+      },
+      { status: 500 },
+    );
+  }
+
+  if (!quota.allowed) {
+    return Response.json(
+      { error: "quota_exhausted", remaining: 0 },
+      {
+        status: 429,
+        headers: {
+          "Cache-Control": "no-store",
+          Vary: "Cookie",
+          "Set-Cookie": quota.cookieHeader,
+        },
+      },
+    );
+  }
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -99,6 +127,9 @@ export async function POST(request: Request): Promise<Response> {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       "X-Accel-Buffering": "no",
+      Vary: "Cookie",
+      "Set-Cookie": quota.cookieHeader,
+      "X-Requests-Remaining": String(quota.remaining),
     },
   });
 }
