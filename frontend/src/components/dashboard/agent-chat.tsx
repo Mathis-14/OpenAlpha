@@ -4,8 +4,14 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import AgentAlphaIcon from "@/components/agent-alpha-icon";
 import MarkdownMessage from "@/components/markdown-message";
+import UsageUnlockModal from "@/components/usage-unlock-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { streamAgent, type AgentSSE } from "@/lib/api";
+import {
+  QuotaExhaustedError,
+  streamAgent,
+  type AgentSSE,
+} from "@/lib/api";
+import { useUsageQuota } from "@/components/usage-quota-provider";
 import {
   getCommodityCategoryLabel,
   getCommodityMeta,
@@ -173,9 +179,11 @@ export default function AgentChat({
   dataAssistant = false,
 }: AgentChatProps) {
   const router = useRouter();
+  const { quota, loading: quotaLoading, refresh, setRemaining } = useUsageQuota();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [unlockOpen, setUnlockOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -199,28 +207,25 @@ export default function AgentChat({
   }
 
   async function handleSend(query: string) {
-    if (!query.trim() || streaming) return;
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery || streaming) return;
+    if (!quotaLoading && (quota?.remaining ?? 0) <= 0) {
+      setUnlockOpen(true);
+      return;
+    }
 
-    const userMsg: ChatMessage = { role: "user", content: query.trim() };
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
     setStreaming(true);
 
     const entries: ChatEntry[] = [];
     const controller = new AbortController();
     abortRef.current = controller;
-
-    setMessages((prev) => [
-      ...prev,
-      { role: "assistant", content: "", entries: [] },
-    ]);
-
+    let requestAccepted = false;
     let runningText = "";
 
     try {
       for await (const sse of streamAgent(
         {
-          query: query.trim(),
+          query: trimmedQuery,
           ticker,
           dashboard_context: dataAssistant
             ? "data"
@@ -236,6 +241,25 @@ export default function AgentChat({
           commodity_instrument: commodityInstrument,
         },
         controller.signal,
+        {
+          onAccepted: (remaining) => {
+            requestAccepted = true;
+            setMessages((prev) => [
+              ...prev,
+              { role: "user", content: trimmedQuery },
+              { role: "assistant", content: "", entries: [] },
+            ]);
+            setInput("");
+            if (remaining != null) {
+              setRemaining(remaining);
+            } else if (quota) {
+              setRemaining(Math.max(0, quota.remaining - 1));
+            } else {
+              void refresh();
+            }
+            scrollToBottom();
+          },
+        },
       )) {
         if (sse.event === "text_delta") {
           runningText += (sse.data.content as string) ?? "";
@@ -273,20 +297,39 @@ export default function AgentChat({
         scrollToBottom();
       }
     } catch (err) {
+      if (err instanceof QuotaExhaustedError) {
+        setRemaining(err.remaining);
+        setUnlockOpen(true);
+        void refresh();
+        return;
+      }
+
       if ((err as Error).name !== "AbortError") {
-        entries.push({
-          type: "error",
-          message: (err as Error).message || "Connection failed",
-        });
-        setMessages((prev) => {
-          const updated = [...prev];
-          updated[updated.length - 1] = {
-            role: "assistant",
-            content: runningText,
-            entries: [...entries],
-          };
-          return updated;
-        });
+        const message = (err as Error).message || "Connection failed";
+        if (!requestAccepted) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: "",
+              entries: [{ type: "error", message }],
+            },
+          ]);
+        } else {
+          entries.push({
+            type: "error",
+            message,
+          });
+          setMessages((prev) => {
+            const updated = [...prev];
+            updated[updated.length - 1] = {
+              role: "assistant",
+              content: runningText,
+              entries: [...entries],
+            };
+            return updated;
+          });
+        }
       }
     } finally {
       setStreaming(false);
@@ -558,6 +601,15 @@ export default function AgentChat({
           )}
         </form>
       </CardContent>
+      <UsageUnlockModal
+        open={unlockOpen}
+        remaining={quota?.remaining ?? 0}
+        onClose={() => setUnlockOpen(false)}
+        onUnlocked={(nextQuota) => {
+          setRemaining(nextQuota.remaining);
+          setUnlockOpen(false);
+        }}
+      />
     </Card>
   );
 }

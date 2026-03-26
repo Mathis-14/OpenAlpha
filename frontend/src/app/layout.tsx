@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { UsageQuotaProvider } from "@/components/usage-quota-provider";
 import "./globals.css";
 
 const inter = Inter({
@@ -31,7 +32,9 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider>
+          <UsageQuotaProvider>{children}</UsageQuotaProvider>
+        </TooltipProvider>
       </body>
     </html>
   );
