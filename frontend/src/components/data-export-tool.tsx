@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { sendGAEvent } from "@next/third-parties/google";
 import {
   Check,
   ChevronDown,
@@ -549,6 +550,9 @@ export default function DataExportTool({
             {formValid ? (
               <a
                 href={exportHref}
+                onClick={() =>
+                  sendGAEvent("event", "download_clicked", { format: "csv" })
+                }
                 className={cn(
                   "inline-flex h-10 items-center justify-center gap-2 rounded-[10px] bg-[#1080ff] px-5 text-sm font-medium text-white transition-colors hover:bg-[#006fe6]",
                   agentPrepared &&

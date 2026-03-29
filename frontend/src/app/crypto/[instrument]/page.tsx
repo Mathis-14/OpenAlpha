@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import LandingSpotlight from "@/components/landing-spotlight";
 import AgentChat from "@/components/dashboard/agent-chat";
+import DashboardOpenedTracker from "@/components/dashboard-opened-tracker";
 import CryptoOverviewGrid from "@/components/dashboard/crypto-overview-grid";
 import CryptoPriceChart from "@/components/dashboard/crypto-price-chart";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
@@ -223,6 +224,7 @@ export default async function CryptoInstrumentPage({
       </header>
 
       <main className="relative z-10 mx-auto max-w-[1280px] px-6 py-8">
+        <DashboardOpenedTracker type="crypto" />
         <DashboardLayout
           topWidgets={topWidgets}
           chartWidget={chartWidget}

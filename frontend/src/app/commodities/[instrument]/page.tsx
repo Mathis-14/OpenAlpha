@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import LandingSpotlight from "@/components/landing-spotlight";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import AgentChat from "@/components/dashboard/agent-chat";
+import DashboardOpenedTracker from "@/components/dashboard-opened-tracker";
 import CommodityOverviewGrid from "@/components/dashboard/commodity-overview-grid";
 import CommodityPriceChart from "@/components/dashboard/commodity-price-chart";
 import DownloadDataLink from "@/components/download-data-link";
@@ -175,6 +176,7 @@ export default async function CommodityInstrumentPage({
       </header>
 
       <main className="relative z-10 mx-auto max-w-[1280px] px-6 py-8">
+        <DashboardOpenedTracker type="commodities" />
         <DashboardLayout
           topWidgets={topWidgets}
           chartWidget={chartWidget}
