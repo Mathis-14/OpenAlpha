@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { sendGAEvent } from "@next/third-parties/google";
 import AgentAlphaIcon from "@/components/agent-alpha-icon";
 import MarkdownMessage from "@/components/markdown-message";
 import UsageUnlockModal from "@/components/usage-unlock-modal";
@@ -210,10 +211,14 @@ export default function AgentChat({
     const trimmedQuery = query.trim();
     if (!trimmedQuery || streaming) return;
     if (!quotaLoading && (quota?.remaining ?? 0) <= 0) {
+      sendGAEvent("event", "agent_request_failed", {
+        reason: "quota_exceeded",
+      });
       setUnlockOpen(true);
       return;
     }
 
+    sendGAEvent("event", "agent_request_started");
     setStreaming(true);
 
     const entries: ChatEntry[] = [];
@@ -221,6 +226,7 @@ export default function AgentChat({
     abortRef.current = controller;
     let requestAccepted = false;
     let runningText = "";
+    let requestFailed = false;
 
     try {
       for await (const sse of streamAgent(
@@ -261,6 +267,13 @@ export default function AgentChat({
           },
         },
       )) {
+        if (sse.event === "done") {
+          if (requestAccepted && !requestFailed) {
+            sendGAEvent("event", "agent_request_completed");
+          }
+          continue;
+        }
+
         if (sse.event === "text_delta") {
           runningText += (sse.data.content as string) ?? "";
           setMessages((prev) => {
@@ -274,6 +287,11 @@ export default function AgentChat({
           });
           scrollToBottom();
           continue;
+        }
+
+        if (sse.event === "error") {
+          requestFailed = true;
+          sendGAEvent("event", "agent_request_failed", { reason: "error" });
         }
 
         const entry = sseToEntry(sse);
@@ -298,6 +316,9 @@ export default function AgentChat({
       }
     } catch (err) {
       if (err instanceof QuotaExhaustedError) {
+        sendGAEvent("event", "agent_request_failed", {
+          reason: "quota_exceeded",
+        });
         setRemaining(err.remaining);
         setUnlockOpen(true);
         void refresh();
@@ -305,6 +326,8 @@ export default function AgentChat({
       }
 
       if ((err as Error).name !== "AbortError") {
+        requestFailed = true;
+        sendGAEvent("event", "agent_request_failed", { reason: "error" });
         const message = (err as Error).message || "Connection failed";
         if (!requestAccepted) {
           setMessages((prev) => [
