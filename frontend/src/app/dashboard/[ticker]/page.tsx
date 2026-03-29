@@ -10,6 +10,7 @@ import FundamentalsGrid from "@/components/dashboard/fundamentals-grid";
 import NewsFeed from "@/components/dashboard/news-feed";
 import FilingsPanel from "@/components/dashboard/filings-panel";
 import AgentChat from "@/components/dashboard/agent-chat";
+import DashboardOpenedTracker from "@/components/dashboard-opened-tracker";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import DownloadDataLink from "@/components/download-data-link";
 import RequestQuotaBadge from "@/components/request-quota-badge";
@@ -171,6 +172,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
       </header>
 
       <main className="relative z-10 mx-auto max-w-[1280px] px-6 py-8">
+        <DashboardOpenedTracker type="stocks" />
         <DashboardLayout
           topWidgets={topWidgets}
           chartWidget={chartWidget}

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import TickerSearch from "@/components/ticker-search";
 import LandingSpotlight from "@/components/landing-spotlight";
 import AgentChat from "@/components/dashboard/agent-chat";
+import DashboardOpenedTracker from "@/components/dashboard-opened-tracker";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import DownloadDataLink from "@/components/download-data-link";
 import RequestQuotaBadge from "@/components/request-quota-badge";
@@ -189,6 +190,7 @@ export default async function MacroPage({
       </header>
 
       <main className="relative z-10 mx-auto max-w-[1280px] px-6 py-8">
+        <DashboardOpenedTracker type="macro" />
         <DashboardLayout
           topWidgets={topWidgets}
           chartWidget={chartWidget}
