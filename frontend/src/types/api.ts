@@ -33,6 +33,8 @@ export interface TickerOverview {
   market_cap: number | null;
   fifty_two_week_high: number | null;
   fifty_two_week_low: number | null;
+  warnings?: string[];
+  data_status?: "complete" | "partial";
 }
 
 export interface Fundamentals {
@@ -140,6 +142,8 @@ export interface CryptoOverview {
   open_interest: number | null;
   funding_8h: number | null;
   current_funding: number | null;
+  warnings?: string[];
+  data_status?: "complete" | "partial";
 }
 
 // ── Commodity Data (Yahoo futures + benchmark metadata) ────────────────────
@@ -190,6 +194,8 @@ export interface CommodityOverview extends CommodityDiscoveryItem {
   fifty_two_week_high: number | null;
   fifty_two_week_low: number | null;
   market_state: string | null;
+  warnings?: string[];
+  data_status?: "complete" | "partial";
 }
 
 // ── Data Export ─────────────────────────────────────────────────────────────
@@ -229,11 +235,14 @@ export interface Filing {
   accession_number: string;
   sec_url: string;
   sections: FilingSection[];
+  sections_available: boolean;
 }
 
 export interface FilingsResponse {
   ticker: string;
   filings: Filing[];
+  warnings?: string[];
+  data_status?: "complete" | "partial";
 }
 
 // ── News (Yahoo RSS) ────────────────────────────────────────────────────────

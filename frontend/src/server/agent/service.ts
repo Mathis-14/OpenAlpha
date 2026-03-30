@@ -2,10 +2,10 @@ import type {
   CommodityInstrumentSlug,
   CryptoInstrument,
   MacroCountry,
+  MacroIndicatorSlug,
 } from "@/types/api";
 import { isCommodityInstrument } from "@/lib/commodities";
 import { buildDataPageHref, getDisplayAssetName } from "@/lib/data-export";
-import { coerceCryptoInstrument } from "@/server/crypto/service";
 import { SYSTEM_PROMPT } from "@/server/agent/prompt";
 import {
   normalizeSuggestedDataExportArgs,
@@ -21,7 +21,7 @@ const MAX_TOKENS = 1024;
 const TOOL_REQUIRED_MESSAGE =
   "You must call at least one tool before answering. Do not answer from memory.";
 
-type AgentRequest = {
+export type AgentRequest = {
   query: string;
   ticker?: string | null;
   dashboard_context?: "macro" | "crypto" | "commodity" | "data" | null;
@@ -120,7 +120,9 @@ function buildUserContent(
     return (
       `${query}\n\n` +
       `[Context: the user is on the macro dashboard for ${countryLabel}. ` +
-      `Use get_macro_snapshot with country='${normalizedCountry}' and keep the answer ` +
+      `Use get_macro_snapshot with country='${normalizedCountry}' for broad context, ` +
+      `and use get_macro_series with country='${normalizedCountry}' when the user asks about one indicator trend or history. ` +
+      "Keep the answer " +
       "grounded in that country unless the user asks to compare or switch countries.]"
     );
   }
@@ -328,7 +330,33 @@ function wantsDownload(query: string): boolean {
   return /\b(csv|download|export|raw data|dataset|data file)\b/i.test(query);
 }
 
-function buildDownloadSuggestion(
+function normalizeMacroIndicatorCandidate(
+  value: unknown,
+): MacroIndicatorSlug | null {
+  if (
+    value === "fed-funds" ||
+    value === "cpi" ||
+    value === "gdp-growth" ||
+    value === "treasury-10y" ||
+    value === "unemployment"
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
+function normalizeMacroCountryCandidate(
+  value: unknown,
+): MacroCountry | null {
+  if (value === "fr" || value === "us") {
+    return value;
+  }
+
+  return null;
+}
+
+export function buildDownloadSuggestion(
   request: AgentRequest,
   toolCalls: Array<{ name: string; args: Record<string, unknown> }>,
 ): { href: string; label: string; description: string } | null {
@@ -406,22 +434,8 @@ function buildDownloadSuggestion(
     };
   }
 
-  if (request.dashboard_context === "macro") {
-    const country = request.country === "fr" ? "fr" : "us";
-    return {
-      href: buildDataPageHref({
-        asset_class: "macro",
-        asset: "fed-funds",
-        country,
-        assistant_ready: assistantReady,
-      }),
-      label: downloadLabel,
-      description: `Open the raw CSV export tool prefilled for ${getDisplayAssetName("macro", "fed-funds", country)}.`,
-    };
-  }
-
   const stockSymbols = new Set<string>();
-  const macroCountries = new Set<MacroCountry>();
+  const macroSignals = new Set<string>();
   const cryptoInstruments = new Set<CryptoInstrument>();
   const commodityInstruments = new Set<CommodityInstrumentSlug>();
 
@@ -440,13 +454,18 @@ function buildDownloadSuggestion(
       continue;
     }
 
-    if (toolCall.name === "get_macro_snapshot") {
-      const candidate = toolCall.args.country;
-      if (candidate === "fr" || candidate === "us") {
-        macroCountries.add(candidate);
-      } else {
-        macroCountries.add("us");
+    if (
+      toolCall.name === "get_macro_series"
+    ) {
+      const indicator = normalizeMacroIndicatorCandidate(toolCall.args.indicator);
+      if (!indicator) {
+        continue;
       }
+
+      const country =
+        normalizeMacroCountryCandidate(toolCall.args.country) ??
+        (request.country === "fr" ? "fr" : "us");
+      macroSignals.add(`${country}:${indicator}`);
       continue;
     }
 
@@ -454,9 +473,12 @@ function buildDownloadSuggestion(
       toolCall.name === "get_crypto_overview" ||
       toolCall.name === "get_crypto_price_history"
     ) {
-      const normalized = coerceCryptoInstrument(toolCall.args.instrument);
-      if (normalized) {
-        cryptoInstruments.add(normalized);
+      const candidate = toolCall.args.instrument;
+      if (
+        typeof candidate === "string" &&
+        (candidate === "BTC-PERPETUAL" || candidate === "ETH-PERPETUAL")
+      ) {
+        cryptoInstruments.add(candidate);
       }
       continue;
     }
@@ -479,7 +501,7 @@ function buildDownloadSuggestion(
 
   const signalCount =
     Number(stockSymbols.size > 0) +
-    Number(macroCountries.size > 0) +
+    Number(macroSignals.size > 0) +
     Number(cryptoInstruments.size > 0) +
     Number(commodityInstruments.size > 0);
 
@@ -500,17 +522,21 @@ function buildDownloadSuggestion(
     };
   }
 
-  if (macroCountries.size === 1) {
-    const country = Array.from(macroCountries)[0];
+  if (macroSignals.size === 1) {
+    const [country, indicator] = Array.from(macroSignals)[0].split(":") as [
+      MacroCountry,
+      MacroIndicatorSlug,
+    ];
+
     return {
       href: buildDataPageHref({
         asset_class: "macro",
-        asset: "fed-funds",
+        asset: indicator,
         country,
         assistant_ready: assistantReady,
       }),
       label: downloadLabel,
-      description: `Open the raw CSV export tool prefilled for ${getDisplayAssetName("macro", "fed-funds", country)}.`,
+      description: `Open the raw CSV export tool prefilled for ${getDisplayAssetName("macro", indicator, country)}.`,
     };
   }
 

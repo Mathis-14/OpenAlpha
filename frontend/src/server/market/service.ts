@@ -35,6 +35,24 @@ function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function requireQuoteNumber(
+  value: unknown,
+  symbol: string,
+  field: string,
+): number {
+  const parsed = asNumber(value);
+  if (parsed != null) {
+    return parsed;
+  }
+
+  throw new ServiceError(503, {
+    error: "upstream_unavailable",
+    provider: "yfinance",
+    ticker: symbol,
+    detail: `Missing required quote field: ${field}`,
+  });
+}
+
 function mapProviderError(error: unknown, symbol: string): ServiceError {
   const message = error instanceof Error ? error.message : String(error);
   const normalizedMessage = message.toLowerCase();
@@ -91,12 +109,25 @@ async function fetchChart(symbol: string, period: PeriodType) {
   }
 }
 
-function buildOverview(
+export function buildOverview(
   quote: Awaited<ReturnType<typeof fetchQuote>>,
   symbol: string,
 ): TickerOverview {
-  const current = asNumber(quote.regularMarketPrice) ?? 0;
-  const previous = asNumber(quote.regularMarketPreviousClose) ?? 0;
+  const current = requireQuoteNumber(
+    quote.regularMarketPrice,
+    symbol,
+    "regularMarketPrice",
+  );
+  const previous = requireQuoteNumber(
+    quote.regularMarketPreviousClose,
+    symbol,
+    "regularMarketPreviousClose",
+  );
+  const volume = requireQuoteNumber(
+    quote.regularMarketVolume,
+    symbol,
+    "regularMarketVolume",
+  );
 
   if (current === 0 && previous === 0) {
     throw new ServiceError(404, {
@@ -117,10 +148,11 @@ function buildOverview(
     previous_close: previous,
     change: Number(change.toFixed(4)),
     change_percent: Number(changePercent.toFixed(4)),
-    volume: asNumber(quote.regularMarketVolume) ?? 0,
+    volume,
     market_cap: asNumber(quote.marketCap),
     fifty_two_week_high: asNumber(quote.fiftyTwoWeekHigh),
     fifty_two_week_low: asNumber(quote.fiftyTwoWeekLow),
+    data_status: "complete",
   };
 }
 

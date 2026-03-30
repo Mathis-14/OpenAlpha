@@ -213,16 +213,25 @@ async function getSubmissions(cik: number): Promise<SecSubmissionsResponse> {
   }
 }
 
-async function fetchFilingText(secUrl: string): Promise<string> {
+async function fetchFilingText(secUrl: string): Promise<{
+  text: string;
+  sectionsAvailable: boolean;
+}> {
   try {
     const html = await fetchText(secUrl, {
       headers: getSecHeaders(),
       revalidate: SEC_REVALIDATE_SECONDS,
       timeoutMs: SEC_TIMEOUT_MS,
     });
-    return stripHtml(html);
+    return {
+      text: stripHtml(html),
+      sectionsAvailable: true,
+    };
   } catch {
-    return "";
+    return {
+      text: "",
+      sectionsAvailable: false,
+    };
   }
 }
 
@@ -246,10 +255,15 @@ export async function getFilings(
   const recent = submissions.filings?.recent;
 
   if (!recent) {
-    return { ticker: normalizedTicker, filings: [] };
+    return {
+      ticker: normalizedTicker,
+      filings: [],
+      data_status: "complete",
+    };
   }
 
   const filings: Filing[] = [];
+  const warnings = new Set<string>();
   for (let index = 0; index < (recent.form?.length ?? 0); index += 1) {
     if ((recent.form?.[index] ?? "") !== formType) {
       continue;
@@ -264,12 +278,18 @@ export async function getFilings(
 
     const secUrl = buildSecUrl(cik, accessionNumber, primaryDocument);
     const filingText = await fetchFilingText(secUrl);
+    if (!filingText.sectionsAvailable) {
+      warnings.add(
+        "Some filing sections could not be fetched from the SEC. Filing metadata is still available.",
+      );
+    }
     filings.push({
       form_type: formType,
       filing_date: filingDate,
       accession_number: accessionNumber,
       sec_url: secUrl,
-      sections: filingText ? extractSections(filingText, formType) : [],
+      sections: filingText.text ? extractSections(filingText.text, formType) : [],
+      sections_available: filingText.sectionsAvailable,
     });
 
     if (filings.length >= limit) {
@@ -280,5 +300,7 @@ export async function getFilings(
   return {
     ticker: normalizedTicker,
     filings,
+    warnings: warnings.size > 0 ? Array.from(warnings) : undefined,
+    data_status: warnings.size > 0 ? "partial" : "complete",
   };
 }
