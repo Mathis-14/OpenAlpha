@@ -1,15 +1,25 @@
 import {
-  getQuotaSnapshot,
-  initializeQuota,
-} from "@/server/usage/quota";
+  getUsageQuotaState,
+} from "@/server/usage/adapter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function appendSetCookies(headers: Headers, values: string[]) {
+  for (const value of values) {
+    headers.append("Set-Cookie", value);
+  }
+}
+
 export async function GET(request: Request): Promise<Response> {
   try {
-    const snapshot = getQuotaSnapshot(request.headers.get("cookie"));
-    const initialized = initializeQuota(request.headers.get("cookie"));
+    const snapshot = await getUsageQuotaState(request);
+    const headers = new Headers({
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+      Vary: "Cookie",
+    });
+    appendSetCookies(headers, snapshot.setCookieHeaders);
 
     return new Response(
       JSON.stringify({
@@ -18,12 +28,7 @@ export async function GET(request: Request): Promise<Response> {
       }),
       {
         status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          Vary: "Cookie",
-          "Set-Cookie": initialized.cookieHeader,
-        },
+        headers,
       },
     );
   } catch (error) {
@@ -32,7 +37,7 @@ export async function GET(request: Request): Promise<Response> {
         error: "quota_unavailable",
         detail: (error as Error).message || "Quota service unavailable",
       },
-      { status: 500 },
+      { status: 503 },
     );
   }
 }

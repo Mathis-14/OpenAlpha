@@ -9,18 +9,22 @@ export default function RequestQuotaBadge({
 }: {
   className?: string;
 }) {
-  const { quota, loading } = useUsageQuota();
+  const { quota, loading, unavailable } = useUsageQuota();
   const remaining = quota?.remaining;
   const text =
-    loading || remaining == null
+    loading
       ? "Loading requests..."
-      : `${remaining} request${remaining === 1 ? "" : "s"} left`;
+      : unavailable
+        ? "Requests unavailable"
+        : remaining == null
+          ? "Requests unavailable"
+          : `${remaining} request${remaining === 1 ? "" : "s"} left`;
 
   return (
     <div
       className={cn(
         "inline-flex h-9 items-center justify-center gap-2 rounded-[10px] border border-black/[0.08] bg-white/92 px-3.5 text-sm shadow-[0_16px_30px_-24px_rgba(0,0,0,0.14)] backdrop-blur-sm",
-        remaining === 0 ? "text-[#b93828]" : "text-[#161616]",
+        unavailable ? "text-black/52" : remaining === 0 ? "text-[#b93828]" : "text-[#161616]",
         className,
       )}
     >

@@ -45,13 +45,50 @@ class QuotaExhaustedError extends ApiError {
   }
 }
 
+async function readErrorMessage(response: Response): Promise<string> {
+  const body = await response.text().catch(() => "");
+  return getErrorMessageFromBody(body, response.statusText || "Request failed");
+}
+
+function getErrorMessageFromBody(
+  body: string,
+  fallback: string,
+): string {
+  if (!body) {
+    return fallback;
+  }
+
+  try {
+    const parsed = JSON.parse(body) as {
+      detail?: unknown;
+      error?: unknown;
+      message?: unknown;
+    };
+
+    if (typeof parsed.detail === "string" && parsed.detail.trim()) {
+      return parsed.detail;
+    }
+
+    if (typeof parsed.message === "string" && parsed.message.trim()) {
+      return parsed.message;
+    }
+
+    if (typeof parsed.error === "string" && parsed.error.trim()) {
+      return parsed.error;
+    }
+  } catch {
+    // Fall back to raw body below.
+  }
+
+  return body;
+}
+
 async function fetchJson<T>(
   path: string,
 ): Promise<T> {
   const res = await fetch(path);
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new ApiError(res.status, body || res.statusText);
+    throw new ApiError(res.status, await readErrorMessage(res));
   }
   return res.json() as Promise<T>;
 }
@@ -167,7 +204,9 @@ export async function searchTickers(
   signal?: AbortSignal,
 ): Promise<SearchResult[]> {
   const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal });
-  if (!res.ok) return [];
+  if (!res.ok) {
+    throw new ApiError(res.status, await readErrorMessage(res));
+  }
   return res.json() as Promise<SearchResult[]>;
 }
 
@@ -217,7 +256,10 @@ export async function unlockUsageQuota(
       throw new ApiError(401, "invalid_password");
     }
 
-    throw new ApiError(res.status, body || res.statusText);
+    throw new ApiError(
+      res.status,
+      getErrorMessageFromBody(body, res.statusText),
+    );
   }
 
   return res.json() as Promise<UsageQuota>;
@@ -254,7 +296,10 @@ export async function* streamAgent(
       );
     }
 
-    throw new ApiError(res.status, body || res.statusText);
+    throw new ApiError(
+      res.status,
+      getErrorMessageFromBody(body, res.statusText),
+    );
   }
 
   const remainingHeader = res.headers.get("x-requests-remaining");

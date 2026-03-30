@@ -327,6 +327,30 @@ export function getQuotaLimit(): number {
   return QUOTA_LIMIT;
 }
 
+export function getQuotaRefill(): number {
+  return QUOTA_REFILL;
+}
+
+export function getQuotaMax(): number {
+  return QUOTA_MAX;
+}
+
+export function getQuotaCookieMaxAgeSeconds(): number {
+  return COOKIE_MAX_AGE_SECONDS;
+}
+
+export function getUnlockMaxFailures(): number {
+  return UNLOCK_MAX_FAILURES;
+}
+
+export function getUnlockLockoutSeconds(): number {
+  return UNLOCK_LOCKOUT_SECONDS;
+}
+
+export function getQuotaSigningSecret(): string {
+  return getSigningSecret();
+}
+
 export function getUnlockGuard(cookieHeader: string | null): {
   blocked: boolean;
   retryAfterSeconds: number;

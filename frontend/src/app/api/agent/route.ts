@@ -1,11 +1,17 @@
 import { isCommodityInstrument } from "@/lib/commodities";
 import type { CommodityInstrumentSlug, CryptoInstrument } from "@/types/api";
 import { runAgent } from "@/server/agent/service";
-import { decrementQuota } from "@/server/usage/quota";
+import { assertQuotaAvailable, decrementUsageQuota } from "@/server/usage/adapter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+function appendSetCookies(headers: Headers, values: string[]) {
+  for (const value of values) {
+    headers.append("Set-Cookie", value);
+  }
+}
 
 type AgentRouteRequest = {
   query?: unknown;
@@ -70,29 +76,42 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "invalid_request" }, { status: 422 });
   }
 
+  if (!process.env.MISTRAL_API_KEY?.trim()) {
+    return Response.json(
+      {
+        error: "agent_unavailable",
+        detail: "MISTRAL_API_KEY is not configured",
+      },
+      { status: 503 },
+    );
+  }
+
   let quota;
   try {
-    quota = decrementQuota(request.headers.get("cookie"));
+    await assertQuotaAvailable(request);
+    quota = await decrementUsageQuota(request);
   } catch (error) {
     return Response.json(
       {
         error: "quota_unavailable",
         detail: (error as Error).message || "Quota service unavailable",
       },
-      { status: 500 },
+      { status: 503 },
     );
   }
 
   if (!quota.allowed) {
+    const headers = new Headers({
+      "Cache-Control": "no-store",
+      Vary: "Cookie",
+    });
+    appendSetCookies(headers, quota.setCookieHeaders);
+
     return Response.json(
       { error: "quota_exhausted", remaining: 0 },
       {
         status: 429,
-        headers: {
-          "Cache-Control": "no-store",
-          Vary: "Cookie",
-          "Set-Cookie": quota.cookieHeader,
-        },
+        headers,
       },
     );
   }
@@ -122,14 +141,14 @@ export async function POST(request: Request): Promise<Response> {
     },
   });
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "X-Accel-Buffering": "no",
-      Vary: "Cookie",
-      "Set-Cookie": quota.cookieHeader,
-      "X-Requests-Remaining": String(quota.remaining),
-    },
+  const headers = new Headers({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "X-Accel-Buffering": "no",
+    Vary: "Cookie",
+    "X-Requests-Remaining": String(quota.remaining),
   });
+  appendSetCookies(headers, quota.setCookieHeaders);
+
+  return new Response(stream, { headers });
 }

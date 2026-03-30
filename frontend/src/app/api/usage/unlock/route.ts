@@ -1,10 +1,10 @@
 import {
-  clearUnlockGuardCookieHeader,
-  getUnlockGuard,
-  registerUnlockFailure,
-  refillQuota,
-  verifyOverridePassword,
-} from "@/server/usage/quota";
+  clearUsageUnlockGuard,
+  getUsageUnlockGuard,
+  refillUsageQuota,
+  registerUsageUnlockFailure,
+  validateOverridePassword,
+} from "@/server/usage/adapter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,16 +13,31 @@ type UnlockRequest = {
   password?: unknown;
 };
 
+function appendSetCookies(headers: Headers, values: string[]) {
+  for (const value of values) {
+    headers.append("Set-Cookie", value);
+  }
+}
+
 export async function POST(request: Request): Promise<Response> {
-  const cookieHeader = request.headers.get("cookie");
-  const unlockGuard = getUnlockGuard(cookieHeader);
-  if (unlockGuard.blocked) {
+  try {
+    const unlockGuard = await getUsageUnlockGuard(request);
+    if (unlockGuard.blocked) {
+      return Response.json(
+        {
+          error: "unlock_rate_limited",
+          retry_after_seconds: unlockGuard.retryAfterSeconds,
+        },
+        { status: 429 },
+      );
+    }
+  } catch (error) {
     return Response.json(
       {
-        error: "unlock_rate_limited",
-        retry_after_seconds: unlockGuard.retryAfterSeconds,
+        error: "quota_unavailable",
+        detail: (error as Error).message || "Quota service unavailable",
       },
-      { status: 429 },
+      { status: 503 },
     );
   }
 
@@ -35,36 +50,61 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const password = typeof body.password === "string" ? body.password : "";
-  if (!verifyOverridePassword(password)) {
-    const failedAttempt = registerUnlockFailure(cookieHeader);
-
+  let passwordValid = false;
+  try {
+    passwordValid = validateOverridePassword(password);
+  } catch (error) {
     return Response.json(
-      failedAttempt.blocked
-        ? {
-            error: "unlock_rate_limited",
-            retry_after_seconds: failedAttempt.retryAfterSeconds,
-          }
-        : { error: "invalid_password" },
       {
-        status: failedAttempt.blocked ? 429 : 401,
-        headers: {
-          "Cache-Control": "no-store",
-          Vary: "Cookie",
-          "Set-Cookie": failedAttempt.cookieHeader,
-        },
+        error: "quota_unavailable",
+        detail: (error as Error).message || "Quota service unavailable",
       },
+      { status: 503 },
     );
   }
 
+  if (!passwordValid) {
+    try {
+      const failedAttempt = await registerUsageUnlockFailure(request);
+      const headers = new Headers({
+        "Cache-Control": "no-store",
+        Vary: "Cookie",
+      });
+      appendSetCookies(headers, failedAttempt.setCookieHeaders);
+
+      return Response.json(
+        failedAttempt.blocked
+          ? {
+              error: "unlock_rate_limited",
+              retry_after_seconds: failedAttempt.retryAfterSeconds,
+            }
+          : { error: "invalid_password" },
+        {
+          status: failedAttempt.blocked ? 429 : 401,
+          headers,
+        },
+      );
+    } catch (error) {
+      return Response.json(
+        {
+          error: "quota_unavailable",
+          detail: (error as Error).message || "Quota service unavailable",
+        },
+        { status: 503 },
+      );
+    }
+  }
+
   try {
-    const refilled = refillQuota(cookieHeader);
+    const refilled = await refillUsageQuota(request);
+    const clearHeaders = await clearUsageUnlockGuard(request);
     const headers = new Headers({
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
       Vary: "Cookie",
     });
-    headers.append("Set-Cookie", refilled.cookieHeader);
-    headers.append("Set-Cookie", clearUnlockGuardCookieHeader());
+    appendSetCookies(headers, refilled.setCookieHeaders);
+    appendSetCookies(headers, clearHeaders);
 
     return new Response(
       JSON.stringify({
@@ -82,7 +122,7 @@ export async function POST(request: Request): Promise<Response> {
         error: "quota_unavailable",
         detail: (error as Error).message || "Quota service unavailable",
       },
-      { status: 500 },
+      { status: 503 },
     );
   }
 }
