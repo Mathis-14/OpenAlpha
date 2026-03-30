@@ -6,6 +6,7 @@ import {
   ColorType,
   createChart,
   type IChartApi,
+  type ISeriesApi,
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
@@ -41,6 +42,7 @@ export default function CryptoPriceChart({
 }: CryptoPriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const [range, setRange] = useState<CryptoRange>(initialRange);
   const [cache, setCache] = useState<Record<string, PricePoint[]>>({
     [initialRange]: initialData,
@@ -49,6 +51,13 @@ export default function CryptoPriceChart({
   const [error, setError] = useState<string | null>(null);
 
   const data = cache[range] ?? initialData;
+
+  useEffect(() => {
+    setRange(initialRange);
+    setCache({ [initialRange]: initialData });
+    setLoading(false);
+    setError(null);
+  }, [instrument, initialData, initialRange]);
 
   function fitChartToData(chart: IChartApi) {
     requestAnimationFrame(() => {
@@ -102,7 +111,7 @@ export default function CryptoPriceChart({
       },
       timeScale: {
         borderColor: "rgba(0,0,0,0.08)",
-        timeVisible: range === "1d" || range === "1w",
+        timeVisible: false,
       },
       rightPriceScale: { borderColor: "rgba(0,0,0,0.08)" },
       width: el.clientWidth,
@@ -118,18 +127,8 @@ export default function CryptoPriceChart({
       wickDownColor: "#ef4444",
     });
 
-    candleSeries.setData(
-      data.map((point) => ({
-        time: toChartTime(point.date),
-        open: point.open,
-        high: point.high,
-        low: point.low,
-        close: point.close,
-      })) as Parameters<typeof candleSeries.setData>[0],
-    );
-    fitChartToData(chart);
-
     chartRef.current = chart;
+    seriesRef.current = candleSeries;
 
     const ro = new ResizeObserver(() => {
       chart.applyOptions({
@@ -142,9 +141,36 @@ export default function CryptoPriceChart({
 
     return () => {
       ro.disconnect();
+      seriesRef.current = null;
       chart.remove();
       chartRef.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) {
+      return;
+    }
+
+    chart.applyOptions({
+      timeScale: {
+        borderColor: "rgba(0,0,0,0.08)",
+        timeVisible: range === "1d" || range === "1w",
+      },
+    });
+
+    series.setData(
+      data.map((point) => ({
+        time: toChartTime(point.date),
+        open: point.open,
+        high: point.high,
+        low: point.low,
+        close: point.close,
+      })) as Parameters<typeof series.setData>[0],
+    );
+    fitChartToData(chart);
   }, [data, range]);
 
   return (

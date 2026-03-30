@@ -39,14 +39,6 @@ export default async function DataPage({
   const initialStartDate = params?.start_date?.trim() || defaults.startDate;
   const initialEndDate = params?.end_date?.trim() || defaults.endDate;
   const assistantReady = params?.assistant_ready === "1";
-  const dataToolKey = [
-    assetClass,
-    initialAsset,
-    country,
-    initialStartDate,
-    initialEndDate,
-    assistantReady ? "assistant" : "manual",
-  ].join(":");
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafcff]">
@@ -80,7 +72,6 @@ export default async function DataPage({
         <div className="grid gap-6 xl:grid-cols-[minmax(0,0.88fr)_minmax(420px,0.64fr)] xl:items-stretch">
           <div className="min-h-0 xl:h-[720px]">
             <DataExportTool
-              key={dataToolKey}
               initialAssetClass={assetClass}
               initialAsset={initialAsset}
               initialCountry={country}

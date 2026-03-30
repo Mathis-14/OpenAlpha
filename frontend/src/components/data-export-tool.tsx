@@ -18,6 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import TICKERS from "@/data/tickers";
 import { searchTickers } from "@/lib/api";
 import {
   buildDataExportHref,
@@ -50,6 +51,8 @@ type PickerOption = {
   logoSrc?: string;
 };
 
+const MAX_STOCK_RESULTS = 8;
+
 const PRESET_OPTIONS: Array<{
   label: string;
   days: number;
@@ -74,6 +77,24 @@ function buildPresetRange(days: number) {
     startDate: formatDateInputValue(startDate),
     endDate: formatDateInputValue(endDate),
   };
+}
+
+function filterLocalStockResults(query: string): SearchResult[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  return TICKERS.filter(
+    (entry) =>
+      entry.symbol.toLowerCase().startsWith(normalizedQuery) ||
+      entry.name.toLowerCase().includes(normalizedQuery),
+  )
+    .slice(0, MAX_STOCK_RESULTS)
+    .map((entry) => ({
+      symbol: entry.symbol,
+      name: entry.name,
+    }));
 }
 
 function AssetPicker({
@@ -210,6 +231,14 @@ export default function DataExportTool({
   assistantReady?: boolean;
 }) {
   const router = useRouter();
+  const initialPageHref = buildDataPageHref({
+    asset_class: initialAssetClass,
+    asset: initialAsset || undefined,
+    country: initialAssetClass === "macro" ? initialCountry : undefined,
+    start_date: initialStartDate,
+    end_date: initialEndDate,
+    assistant_ready: assistantReady || undefined,
+  });
   const [assetClass, setAssetClass] = useState<DataAssetClass>(initialAssetClass);
   const [asset, setAsset] = useState(initialAsset);
   const [country, setCountry] = useState<MacroCountry>(initialCountry);
@@ -218,14 +247,34 @@ export default function DataExportTool({
   const [stockResults, setStockResults] = useState<SearchResult[]>([]);
   const [stockQueryOpen, setStockQueryOpen] = useState(false);
   const [agentPrepared, setAgentPrepared] = useState(assistantReady);
+  const [searchUnavailable, setSearchUnavailable] = useState(false);
+  const [syncedPageHref, setSyncedPageHref] = useState(initialPageHref);
+
+  if (initialPageHref !== syncedPageHref) {
+    setSyncedPageHref(initialPageHref);
+    setAssetClass(initialAssetClass);
+    setAsset(initialAsset);
+    setCountry(initialCountry);
+    setStartDate(initialStartDate);
+    setEndDate(initialEndDate);
+    setAgentPrepared(assistantReady);
+    setStockResults([]);
+    setStockQueryOpen(false);
+    setSearchUnavailable(false);
+  }
 
   useEffect(() => {
     if (assetClass !== "stock") {
       return;
     }
-
     const query = asset.trim();
     if (!query) {
+      return;
+    }
+
+    const localResults = filterLocalStockResults(query);
+
+    if (localResults.length >= MAX_STOCK_RESULTS) {
       return;
     }
 
@@ -234,12 +283,17 @@ export default function DataExportTool({
       try {
         const results = await searchTickers(query, controller.signal);
         if (!controller.signal.aborted) {
-          setStockResults(results.slice(0, 8));
+          const localSymbols = new Set(localResults.map((result) => result.symbol));
+          setStockResults(
+            results
+              .filter((result) => !localSymbols.has(result.symbol))
+              .slice(0, MAX_STOCK_RESULTS - localResults.length),
+          );
+          setSearchUnavailable(false);
         }
       } catch {
         if (!controller.signal.aborted) {
-          setStockResults([]);
-          setStockQueryOpen(false);
+          setSearchUnavailable(true);
         }
       }
     }, 220);
@@ -249,22 +303,6 @@ export default function DataExportTool({
       window.clearTimeout(timer);
     };
   }, [asset, assetClass]);
-
-  useEffect(() => {
-    startTransition(() => {
-      router.replace(
-        buildDataPageHref({
-          asset_class: assetClass,
-          asset: asset || undefined,
-          country: assetClass === "macro" ? country : undefined,
-          start_date: startDate,
-          end_date: endDate,
-          assistant_ready: agentPrepared || undefined,
-        }),
-        { scroll: false },
-      );
-    });
-  }, [assetClass, asset, country, startDate, endDate, agentPrepared, router]);
 
   const schema = useMemo(
     () => getDataExportSchema(assetClass, asset),
@@ -276,6 +314,15 @@ export default function DataExportTool({
   );
   const columns = useMemo(() => getDataSchemaColumns(schema), [schema]);
   const formValid = isValidAssetSelection(assetClass, asset, country) && startDate && endDate;
+  const pageHref = buildDataPageHref({
+    asset_class: assetClass,
+    asset: asset || undefined,
+    country: assetClass === "macro" ? country : undefined,
+    start_date: startDate,
+    end_date: endDate,
+    assistant_ready: agentPrepared || undefined,
+  });
+  const hasPendingChanges = pageHref !== initialPageHref;
   const exportHref = formValid
     ? buildDataExportHref({
         asset_class: assetClass,
@@ -294,14 +341,28 @@ export default function DataExportTool({
     setCountry("us");
     setStartDate(defaults.startDate);
     setEndDate(defaults.endDate);
+    setStockResults([]);
     setStockQueryOpen(false);
+    setSearchUnavailable(false);
   }
 
   const displayName = formValid
     ? getDisplayAssetName(assetClass, asset, country)
     : "Select an asset";
-  const visibleStockResults =
-    assetClass === "stock" && asset.trim() ? stockResults : [];
+  const visibleStockResults = useMemo(() => {
+    if (assetClass !== "stock" || !asset.trim()) {
+      return [];
+    }
+
+    const localResults = filterLocalStockResults(asset);
+    const localSymbols = new Set(localResults.map((result) => result.symbol));
+    return [
+      ...localResults,
+      ...stockResults
+        .filter((result) => !localSymbols.has(result.symbol))
+        .slice(0, MAX_STOCK_RESULTS - localResults.length),
+    ];
+  }, [asset, assetClass, stockResults]);
   const showStockResults = stockQueryOpen && visibleStockResults.length > 0;
   const commodityOptions: PickerOption[] = SUPPORTED_COMMODITIES.map((item) => ({
     value: item.instrument,
@@ -323,6 +384,12 @@ export default function DataExportTool({
     value: item.value,
     label: item.label,
   }));
+
+  function applyDraftToUrl() {
+    startTransition(() => {
+      router.replace(pageHref, { scroll: false });
+    });
+  }
 
   return (
     <Card className="flex h-full flex-col rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
@@ -369,7 +436,12 @@ export default function DataExportTool({
                         const nextValue = event.target.value.toUpperCase();
                         setAgentPrepared(false);
                         setAsset(nextValue);
+                        setStockResults([]);
+                        if (!nextValue.trim()) {
+                          setStockQueryOpen(false);
+                        }
                         setStockQueryOpen(Boolean(nextValue.trim()));
+                        setSearchUnavailable(false);
                       }}
                       onFocus={() => {
                         if (stockResults.length > 0) {
@@ -407,6 +479,11 @@ export default function DataExportTool({
                         ))}
                       </ul>
                     )}
+                    {searchUnavailable ? (
+                      <p className="text-xs text-black/52">
+                        Remote search is temporarily unavailable. Showing local matches only.
+                      </p>
+                    ) : null}
                   </div>
                 ) : assetClass === "macro" ? (
                   <div className="space-y-3">
@@ -547,27 +624,40 @@ export default function DataExportTool({
                 <div className="h-[40px]" />
               )}
             </div>
-            {formValid ? (
-              <a
-                href={exportHref}
-                onClick={() =>
-                  sendGAEvent("event", "download_clicked", { format: "csv" })
-                }
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button
+                type="button"
+                onClick={applyDraftToUrl}
+                disabled={!hasPendingChanges}
                 className={cn(
-                  "inline-flex h-10 items-center justify-center gap-2 rounded-[10px] bg-[#1080ff] px-5 text-sm font-medium text-white transition-colors hover:bg-[#006fe6]",
-                  agentPrepared &&
-                    "ring-4 ring-[#1080ff]/18 shadow-[0_0_0_1px_rgba(16,128,255,0.12),0_0_0_12px_rgba(16,128,255,0.08),0_18px_38px_-24px_rgba(16,128,255,0.45)] animate-[pulse_2s_ease-in-out_infinite]",
+                  "inline-flex h-10 items-center justify-center rounded-[10px] border border-black/[0.08] bg-white px-4 text-sm text-[#161616] transition-colors hover:bg-[#f4f8ff]",
+                  !hasPendingChanges && "pointer-events-none opacity-50",
                 )}
               >
-                <Download className="h-4 w-4" />
-                Download CSV
-              </a>
-            ) : (
-              <span className="inline-flex h-10 items-center justify-center gap-2 rounded-[10px] bg-[#1080ff] px-5 text-sm font-medium text-white opacity-50">
-                <Download className="h-4 w-4" />
-                Download CSV
-              </span>
-            )}
+                Apply
+              </button>
+              {formValid ? (
+                <a
+                  href={exportHref}
+                  onClick={() =>
+                    sendGAEvent("event", "download_clicked", { format: "csv" })
+                  }
+                  className={cn(
+                    "inline-flex h-10 items-center justify-center gap-2 rounded-[10px] bg-[#1080ff] px-5 text-sm font-medium text-white transition-colors hover:bg-[#006fe6]",
+                    agentPrepared &&
+                      "ring-4 ring-[#1080ff]/18 shadow-[0_0_0_1px_rgba(16,128,255,0.12),0_0_0_12px_rgba(16,128,255,0.08),0_18px_38px_-24px_rgba(16,128,255,0.45)] animate-[pulse_2s_ease-in-out_infinite]",
+                  )}
+                >
+                  <Download className="h-4 w-4" />
+                  Download CSV
+                </a>
+              ) : (
+                <span className="inline-flex h-10 items-center justify-center gap-2 rounded-[10px] bg-[#1080ff] px-5 text-sm font-medium text-white opacity-50">
+                  <Download className="h-4 w-4" />
+                  Download CSV
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </CardContent>

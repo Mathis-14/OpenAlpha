@@ -36,6 +36,7 @@ export default function TickerSearch({
   const [results, setResults] = useState<TickerEntry[]>([]);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(-1);
+  const [searchUnavailable, setSearchUnavailable] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -67,6 +68,7 @@ export default function TickerSearch({
     if (q.length === 0) {
       setResults([]);
       setOpen(false);
+      setSearchUnavailable(false);
       return;
     }
 
@@ -74,6 +76,7 @@ export default function TickerSearch({
     setResults(local);
     setOpen(true);
     setSelected(-1);
+    setSearchUnavailable(false);
 
     if (local.length >= MAX_RESULTS) return;
 
@@ -91,10 +94,13 @@ export default function TickerSearch({
             .slice(0, MAX_RESULTS - local.length),
         ];
         if (!controller.signal.aborted) {
+          setSearchUnavailable(false);
           setResults(merged);
         }
       } catch {
-        /* ignore */
+        if (!controller.signal.aborted) {
+          setSearchUnavailable(true);
+        }
       }
     }, DEBOUNCE_MS);
   }, []);
@@ -251,6 +257,11 @@ export default function TickerSearch({
               <span className="truncate">{item.name}</span>
             </li>
           ))}
+          {searchUnavailable ? (
+            <li className="border-t border-black/[0.08] px-3.5 py-2 text-xs text-black/52">
+              Remote search is temporarily unavailable. Showing local matches only.
+            </li>
+          ) : null}
         </ul>
       )}
     </div>
