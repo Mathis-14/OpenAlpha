@@ -8,7 +8,9 @@ import type {
   DataAssetClass,
   DataExportQuery,
   MacroCountry,
+  MacroHistoryRange,
   MacroIndicator,
+  MacroIndicatorSlug,
   PeriodType,
   PricePoint,
 } from "@/types/api";
@@ -19,7 +21,6 @@ import {
   parseCommodityInstrument,
 } from "@/server/commodities/service";
 import {
-  coerceCryptoInstrument,
   getCryptoOverview,
   getCryptoPriceHistory,
   parseCryptoInstrument,
@@ -28,8 +29,10 @@ import {
 import { parseDataAssetClass } from "@/server/data/export";
 import { getFilings } from "@/server/filings/service";
 import {
+  getMacroIndicator,
   getMacroSnapshotForCountry,
   parseMacroCountry,
+  parseMacroHistoryRange,
   parseMacroIndicatorSlug,
 } from "@/server/macro/service";
 import {
@@ -117,7 +120,11 @@ const SUPPORTED_COMMODITY_INSTRUMENTS: CommodityInstrumentSlug[] = [
 ];
 
 function normalizeCryptoInstrument(value: unknown): CryptoInstrument {
-  return coerceCryptoInstrument(value) ?? "BTC-PERPETUAL";
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("Crypto tools require a supported instrument.");
+  }
+
+  return parseCryptoInstrument(value);
 }
 
 function normalizeCryptoRange(value: unknown): CryptoRange {
@@ -125,11 +132,11 @@ function normalizeCryptoRange(value: unknown): CryptoRange {
 }
 
 function normalizeCommodityInstrument(value: unknown): CommodityInstrumentSlug {
-  if (typeof value === "string") {
-    return parseCommodityInstrument(value);
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("Commodity tools require a supported instrument.");
   }
 
-  return "gold";
+  return parseCommodityInstrument(value);
 }
 
 function normalizeCommodityRange(value: unknown): CommodityRange {
@@ -137,6 +144,18 @@ function normalizeCommodityRange(value: unknown): CommodityRange {
     COMMODITY_HISTORY_PERIODS.has(value as CommodityRange)
     ? (value as CommodityRange)
     : "1mo";
+}
+
+function normalizeMacroIndicator(value: unknown): MacroIndicatorSlug {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("Macro series tools require a supported indicator.");
+  }
+
+  return parseMacroIndicatorSlug(value);
+}
+
+function normalizeMacroRange(value: unknown): MacroHistoryRange {
+  return parseMacroHistoryRange(typeof value === "string" ? value : null);
 }
 
 function toPresetDateRange(preset: "1mo" | "3mo" | "1y" | "5y") {
@@ -398,6 +417,35 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
             description: "Macro dashboard country context (default: us)",
           },
         },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_macro_series",
+      description:
+        "Get one macroeconomic time series for a specific indicator and country. Use this when the user is focused on CPI, rates, GDP growth, Treasury yields, or unemployment trends.",
+      parameters: {
+        type: "object",
+        properties: {
+          indicator: {
+            type: "string",
+            enum: ["fed-funds", "cpi", "gdp-growth", "treasury-10y", "unemployment"],
+            description: "The macro indicator slug",
+          },
+          country: {
+            type: "string",
+            enum: ["us", "fr"],
+            description: "Macro country context (default: us)",
+          },
+          range: {
+            type: "string",
+            enum: ["1y", "3y", "5y", "10y", "max"],
+            description: "Historical window to fetch (default: 5y)",
+          },
+        },
+        required: ["indicator"],
       },
     },
   },
@@ -720,6 +768,36 @@ export async function dispatchToolWithDisplay(
             {
               label: "Unemployment",
               value: formatIndicatorValue(snapshot.unemployment, 1),
+            },
+          ],
+        },
+      },
+    ];
+  } else if (name === "get_macro_series") {
+    const indicator = normalizeMacroIndicator(argumentsObject.indicator);
+    const country = normalizeCountry(argumentsObject.country);
+    const range = normalizeMacroRange(argumentsObject.range);
+    const series = await getMacroIndicator(indicator, range, country);
+    result = series;
+    displays = [
+      {
+        type: "display_chart",
+        data: {
+          symbol: indicator,
+          period: range,
+          points: series.history.slice(-60).map((point) => ({
+            date: Date.parse(`${point.date}T00:00:00.000Z`) / 1000,
+            close: point.value,
+          })),
+        },
+      },
+      {
+        type: "display_metric",
+        data: {
+          metrics: [
+            {
+              label: series.name,
+              value: formatIndicatorValue(series, series.unit === "%" ? 2 : 1),
             },
           ],
         },

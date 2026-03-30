@@ -103,7 +103,9 @@ function FilingItem({ filing }: { filing: Filing }) {
             ))
           ) : (
             <p className="text-sm text-black/62">
-              No parsed sections available.
+              {filing.sections_available
+                ? "No parsed sections available."
+                : "Parsed sections are temporarily unavailable for this filing."}
             </p>
           )}
         </div>

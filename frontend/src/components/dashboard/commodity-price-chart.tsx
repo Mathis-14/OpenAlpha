@@ -114,7 +114,7 @@ export default function CommodityPriceChart({
       },
       timeScale: {
         borderColor: "rgba(0,0,0,0.08)",
-        timeVisible: range === "1d" || range === "5d",
+        timeVisible: false,
         minimumHeight: 28,
       },
       rightPriceScale: { borderColor: "rgba(0,0,0,0.08)" },

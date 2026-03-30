@@ -193,6 +193,8 @@ The agent can also suggest handoffs:
 
 - the app includes a configurable AI request quota flow
 - when the quota is exhausted, a password unlock modal can add more requests
+- production quota enforcement is designed to run server-side with Upstash Redis
+- `QUOTA_ENABLED=false` forces the legacy cookie quota path for that deployment
 
 ![OpenAlpha macro dashboard](./README.assets/macro-dashboard.png)
 <p align="center"><em>Macro dashboard with country-aware context and live series exploration.</em></p>
@@ -239,6 +241,9 @@ Required or commonly used variables:
 | `EDGAR_USER_AGENT`             | Required for SEC EDGAR access                                            |
 | `REQUEST_QUOTA_SIGNING_SECRET` | Signs the request quota cookie                                           |
 | `REQUEST_OVERRIDE_PASSWORD`    | Password used to unlock more AI requests                                 |
+| `QUOTA_ENABLED`                | Enables the server-side quota adapter, defaults to `true`                |
+| `UPSTASH_REDIS_REST_URL`       | Upstash Redis REST endpoint for server-side quota                        |
+| `UPSTASH_REDIS_REST_TOKEN`     | Upstash Redis REST token for server-side quota                           |
 
 
 Important notes:
@@ -247,6 +252,8 @@ Important notes:
 - do **not** use `NEXT_PUBLIC_` for these values
 - the active app does **not** require `NEXT_PUBLIC_API_URL`
 - for deployment, these values belong in Vercel environment variables
+- if `QUOTA_ENABLED=true`, configure Upstash
+- set `QUOTA_ENABLED=false` only when you intentionally want to use the legacy cookie quota path
 
 ## Deployment
 

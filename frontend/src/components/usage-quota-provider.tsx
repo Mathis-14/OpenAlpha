@@ -15,6 +15,7 @@ import type { UsageQuota } from "@/types/api";
 type UsageQuotaContextValue = {
   quota: UsageQuota | null;
   loading: boolean;
+  unavailable: boolean;
   refresh: () => Promise<void>;
   setRemaining: (remaining: number) => void;
 };
@@ -26,14 +27,16 @@ const DEFAULT_LIMIT = 20;
 export function UsageQuotaProvider({ children }: { children: ReactNode }) {
   const [quota, setQuota] = useState<UsageQuota | null>(null);
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const nextQuota = await getUsageQuota();
       setQuota(nextQuota);
+      setUnavailable(false);
     } catch {
-      setQuota((prev) => prev ?? { limit: DEFAULT_LIMIT, remaining: DEFAULT_LIMIT });
+      setUnavailable(true);
     } finally {
       setLoading(false);
     }
@@ -44,6 +47,7 @@ export function UsageQuotaProvider({ children }: { children: ReactNode }) {
       limit: prev?.limit ?? DEFAULT_LIMIT,
       remaining: Math.max(0, Math.trunc(remaining)),
     }));
+    setUnavailable(false);
   }, []);
 
   useEffect(() => {
@@ -54,10 +58,11 @@ export function UsageQuotaProvider({ children }: { children: ReactNode }) {
     () => ({
       quota,
       loading,
+      unavailable,
       refresh,
       setRemaining,
     }),
-    [quota, loading, refresh, setRemaining],
+    [quota, loading, unavailable, refresh, setRemaining],
   );
 
   return (

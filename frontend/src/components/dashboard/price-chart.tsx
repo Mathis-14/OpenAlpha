@@ -6,6 +6,7 @@ import {
   ColorType,
   CandlestickSeries,
   type IChartApi,
+  type ISeriesApi,
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts";
@@ -55,6 +56,7 @@ export default function PriceChart({
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const [period, setPeriod] = useState<PeriodType>(initialPeriod);
   const [cache, setCache] = useState<Record<string, PricePoint[]>>({
     [initialPeriod]: initialData,
@@ -63,6 +65,13 @@ export default function PriceChart({
   const [error, setError] = useState<string | null>(null);
 
   const data = cache[period] ?? initialData;
+
+  useEffect(() => {
+    setPeriod(initialPeriod);
+    setCache({ [initialPeriod]: initialData });
+    setLoading(false);
+    setError(null);
+  }, [ticker, initialData, initialPeriod]);
 
   function fitChartToData(chart: IChartApi) {
     requestAnimationFrame(() => {
@@ -111,7 +120,7 @@ export default function PriceChart({
       },
       timeScale: {
         borderColor: "rgba(0,0,0,0.08)",
-        timeVisible: period === "1d" || period === "5d",
+        timeVisible: false,
       },
       rightPriceScale: { borderColor: "rgba(0,0,0,0.08)" },
       width: el.clientWidth,
@@ -127,18 +136,8 @@ export default function PriceChart({
       wickDownColor: "#ef4444",
     });
 
-    candleSeries.setData(
-      data.map((p) => ({
-        time: toChartTime(p.date),
-        open: p.open,
-        high: p.high,
-        low: p.low,
-        close: p.close,
-      })) as Parameters<typeof candleSeries.setData>[0],
-    );
-    fitChartToData(chart);
-
     chartRef.current = chart;
+    seriesRef.current = candleSeries;
 
     const ro = new ResizeObserver(() => {
       if (!el) return;
@@ -152,9 +151,36 @@ export default function PriceChart({
 
     return () => {
       ro.disconnect();
+      seriesRef.current = null;
       chart.remove();
       chartRef.current = null;
     };
+  }, []);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series) {
+      return;
+    }
+
+    chart.applyOptions({
+      timeScale: {
+        borderColor: "rgba(0,0,0,0.08)",
+        timeVisible: period === "1d" || period === "5d",
+      },
+    });
+
+    series.setData(
+      data.map((p) => ({
+        time: toChartTime(p.date),
+        open: p.open,
+        high: p.high,
+        low: p.low,
+        close: p.close,
+      })) as Parameters<typeof series.setData>[0],
+    );
+    fitChartToData(chart);
   }, [data, period]);
 
   return (

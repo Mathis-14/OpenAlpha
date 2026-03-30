@@ -180,7 +180,13 @@ export default function AgentChat({
   dataAssistant = false,
 }: AgentChatProps) {
   const router = useRouter();
-  const { quota, loading: quotaLoading, refresh, setRemaining } = useUsageQuota();
+  const {
+    quota,
+    loading: quotaLoading,
+    unavailable: quotaUnavailable,
+    refresh,
+    setRemaining,
+  } = useUsageQuota();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -210,7 +216,7 @@ export default function AgentChat({
   async function handleSend(query: string) {
     const trimmedQuery = query.trim();
     if (!trimmedQuery || streaming) return;
-    if (!quotaLoading && (quota?.remaining ?? 0) <= 0) {
+    if (!quotaLoading && !quotaUnavailable && quota != null && quota.remaining <= 0) {
       sendGAEvent("event", "agent_request_failed", {
         reason: "quota_exceeded",
       });
@@ -258,7 +264,7 @@ export default function AgentChat({
             setInput("");
             if (remaining != null) {
               setRemaining(remaining);
-            } else if (quota) {
+            } else if (quota && !quotaUnavailable) {
               setRemaining(Math.max(0, quota.remaining - 1));
             } else {
               void refresh();

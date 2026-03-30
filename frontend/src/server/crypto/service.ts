@@ -92,6 +92,23 @@ function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function requireTickerNumber(
+  value: unknown,
+  instrument: CryptoInstrument,
+  field: string,
+): number {
+  const parsed = asNumber(value);
+  if (parsed != null) {
+    return parsed;
+  }
+
+  throw new ServiceError(503, {
+    error: "upstream_unavailable",
+    provider: "deribit",
+    detail: `Missing required market field for ${instrument}: ${field}`,
+  });
+}
+
 function isCryptoInstrument(value: string): value is CryptoInstrument {
   return (SUPPORTED_INSTRUMENTS as readonly string[]).includes(value);
 }
@@ -269,12 +286,14 @@ export function coerceCryptoInstrument(value: unknown): CryptoInstrument | null 
   return null;
 }
 
-function buildCryptoOverview(
+export function buildCryptoOverview(
   instrument: CryptoInstrument,
   metadata: DeribitInstrumentPayload,
   ticker: DeribitTickerPayload,
 ): CryptoOverview {
   const meta = getCryptoMarketMeta(instrument);
+  const lastPrice = requireTickerNumber(ticker.last_price, instrument, "last_price");
+  const markPrice = requireTickerNumber(ticker.mark_price, instrument, "mark_price");
 
   return {
     instrument,
@@ -299,8 +318,8 @@ function buildCryptoOverview(
     taker_commission: asNumber(metadata.taker_commission),
     creation_timestamp: asNumber(metadata.creation_timestamp),
     expiration_timestamp: asNumber(metadata.expiration_timestamp),
-    last_price: asNumber(ticker.last_price) ?? 0,
-    mark_price: asNumber(ticker.mark_price) ?? 0,
+    last_price: lastPrice,
+    mark_price: markPrice,
     index_price: asNumber(ticker.index_price),
     best_bid_price: asNumber(ticker.best_bid_price),
     best_ask_price: asNumber(ticker.best_ask_price),
@@ -312,6 +331,7 @@ function buildCryptoOverview(
     open_interest: asNumber(ticker.open_interest),
     funding_8h: asNumber(ticker.funding_8h),
     current_funding: asNumber(ticker.current_funding),
+    data_status: "complete",
   };
 }
 
