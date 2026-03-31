@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "find src -name '*.test.ts' -print0 | xargs -0 ./node_modules/.bin/tsx --test",
+    "probe:news:broad": "tsx src/server/news/probe-broad.ts",
     "audit:agent": "tsx src/server/agent/audit/run.ts"
   },
   "dependencies": {

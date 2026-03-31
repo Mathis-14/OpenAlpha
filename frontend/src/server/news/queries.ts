@@ -9,6 +9,14 @@ import type {
 
 const GEOPOLITICAL_CONTEXT_PATTERN =
   /\b(geopolitic|geopolitical|tariff|tariffs|trade war|trade tension|war|wars|conflict|conflicts|sanction|sanctions|election|elections|middle east)\b/i;
+const RATES_CONTEXT_PATTERN =
+  /\b(rate|rates|yield|yields|treasury|bond|bonds|fed|central bank|monetary)\b/i;
+const MACRO_CONTEXT_PATTERN =
+  /\b(macro|inflation|cpi|gdp|growth|economy|economic|recession|jobs|jobless|payrolls|unemployment|consumer|spending)\b/i;
+const RISK_CONTEXT_PATTERN =
+  /\b(risk|risks|risk sentiment|risk-off|risk on|volatility|fear|selloff|stress|safe haven|uncertainty)\b/i;
+const MARKET_CONTEXT_PATTERN =
+  /\b(global|world|markets?|wall street|backdrop|broader market|market context|world market|market headline|market news)\b/i;
 
 function getMacroCountryLabel(country: MacroCountry): string {
   return country === "fr" ? "France" : "United States";
@@ -52,8 +60,32 @@ export function getFocusedNewsQueryForMacro(
   }
 }
 
+export function normalizeContextNewsQuery(query: string): string {
+  if (GEOPOLITICAL_CONTEXT_PATTERN.test(query)) {
+    return "geopolitics";
+  }
+
+  if (RATES_CONTEXT_PATTERN.test(query)) {
+    return "rates";
+  }
+
+  if (MACRO_CONTEXT_PATTERN.test(query)) {
+    return "macro";
+  }
+
+  if (RISK_CONTEXT_PATTERN.test(query)) {
+    return "risk";
+  }
+
+  if (MARKET_CONTEXT_PATTERN.test(query)) {
+    return "markets";
+  }
+
+  return "markets";
+}
+
 export function getContextNewsQueryFromPrompt(query: string): string {
-  return GEOPOLITICAL_CONTEXT_PATTERN.test(query) ? "geopolitics" : "markets";
+  return normalizeContextNewsQuery(query);
 }
 
 export function getDefaultContextNewsQuery(): string {

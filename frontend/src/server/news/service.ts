@@ -1,56 +1,67 @@
 import type { NewsArticle, NewsResponse } from "@/types/api";
 import { ServiceError } from "@/server/shared/errors";
-import { fetchText } from "@/server/shared/http";
+import {
+  fetchFinnhubCompanyNews,
+  fetchFinnhubMarketNews,
+  fetchYahooNews,
+  getFinnhubApiKey,
+  normalizeNewsQuery,
+} from "./providers.ts";
+import { getBroadNewsContext } from "./broad.ts";
+import { normalizeContextNewsQuery } from "./queries.ts";
 
-const NEWS_REVALIDATE_SECONDS = 900;
-const NEWS_TIMEOUT_MS = 10_000;
+type FocusedFallbackStrategy = {
+  kind: "company" | "topic";
+  label: string;
+  source_mode: "query_feed" | "broad_feed";
+};
 
-const ITEM_REGEX = /<item>([\s\S]*?)<\/item>/gi;
+const GENERIC_FOCUSED_QUERY_BLOCKLIST = new Set([
+  "global",
+  "world",
+  "market",
+  "markets",
+  "macro",
+  "risk",
+  "risks",
+  "rates",
+  "geopolitics",
+  "commodity",
+  "commodities",
+  "crypto",
+]);
 
-function normalizeQuery(value: string): string {
-  return value
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u2010-\u2015\u2212]/g, "-");
-}
-
-function extractTagValue(xml: string, tag: string): string {
-  const match = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "i"));
-  return match?.[1]?.trim() ?? "";
-}
-
-function stripCdata(value: string): string {
-  return value
-    .replace(/^<!\[CDATA\[/, "")
-    .replace(/\]\]>$/, "")
-    .trim();
-}
-
-function decodeXml(value: string): string {
-  return stripCdata(value)
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}
-
-function parseRss(xml: string): NewsArticle[] {
-  const items = [...xml.matchAll(ITEM_REGEX)];
-  return items.map((item) => {
-    const body = item[1];
-    const published = extractTagValue(body, "pubDate");
-
-    return {
-      title: decodeXml(extractTagValue(body, "title")),
-      source: "Yahoo Finance",
-      published: published ? new Date(published).toISOString() : null,
-      summary: decodeXml(extractTagValue(body, "description")),
-      url: decodeXml(extractTagValue(body, "link")),
-    };
-  });
-}
+const FOCUSED_QUERY_ALIASES: Array<{ pattern: RegExp; terms: string[] }> = [
+  { pattern: /\b(bitcoin|btc)\b/i, terms: ["bitcoin", "btc", "crypto"] },
+  { pattern: /\b(ethereum|eth)\b/i, terms: ["ethereum", "eth", "crypto"] },
+  { pattern: /\bgold\b/i, terms: ["gold", "bullion", "precious metals"] },
+  { pattern: /\bsilver\b/i, terms: ["silver", "precious metals", "metals"] },
+  { pattern: /\b(wti|crude oil)\b/i, terms: ["wti", "crude oil", "oil", "energy"] },
+  { pattern: /\bbrent\b/i, terms: ["brent", "crude oil", "oil", "energy"] },
+  { pattern: /\bnatural gas\b/i, terms: ["natural gas", "natgas", "energy"] },
+  { pattern: /\bcopper\b/i, terms: ["copper", "metals"] },
+  { pattern: /\baluminum\b/i, terms: ["aluminum", "metals"] },
+  { pattern: /\bwheat\b/i, terms: ["wheat", "grain", "agriculture"] },
+  { pattern: /\bcoffee\b/i, terms: ["coffee", "agriculture"] },
+  { pattern: /\bcocoa\b/i, terms: ["cocoa", "agriculture"] },
+  { pattern: /\buranium\b/i, terms: ["uranium", "energy"] },
+  {
+    pattern: /\b(united states|u\.s\.|us)\s+inflation\b/i,
+    terms: ["inflation", "cpi", "u.s. inflation", "us inflation"],
+  },
+  {
+    pattern: /\b(united states|u\.s\.|us)\s+economy\b/i,
+    terms: ["economy", "u.s. economy", "us economy", "growth"],
+  },
+  {
+    pattern: /\b(united states|u\.s\.|us)\s+interest rates\b/i,
+    terms: ["interest rates", "fed", "monetary policy", "rates"],
+  },
+  {
+    pattern: /\b(united states|u\.s\.|us)\s+bond yields\b/i,
+    terms: ["bond yields", "treasury yields", "rates", "treasury"],
+  },
+];
 
 function toSearchableText(article: NewsArticle): string {
   return `${article.title} ${article.summary}`.toLowerCase();
@@ -85,9 +96,22 @@ function sortByRelevance(articles: NewsArticle[], terms: string[]): NewsArticle[
 }
 
 function buildFocusedTerms(query: string): string[] {
-  const normalized = normalizeQuery(query).toLowerCase();
+  const normalized = normalizeNewsQuery(query).toLowerCase();
   const parts = normalized.split(/\s+/).filter((part) => part.length >= 3);
-  return Array.from(new Set([normalized, ...parts]));
+  const aliases = FOCUSED_QUERY_ALIASES.flatMap((entry) =>
+    entry.pattern.test(normalized) ? entry.terms : [],
+  );
+  const aliasParts = aliases.flatMap((alias) =>
+    normalizeNewsQuery(alias).toLowerCase().split(/\s+/).filter((part) => part.length >= 3),
+  );
+  return Array.from(new Set([normalized, ...parts, ...aliases, ...aliasParts]));
+}
+
+function trimResponseArticles(response: NewsResponse, limit: number): NewsResponse {
+  return {
+    ...response,
+    articles: response.articles.slice(0, limit),
+  };
 }
 
 function buildFocusedResponse(query: string, articles: NewsArticle[]): NewsResponse {
@@ -124,61 +148,352 @@ function buildFocusedResponse(query: string, articles: NewsArticle[]): NewsRespo
   };
 }
 
-function buildContextResponse(query: string, articles: NewsArticle[]): NewsResponse {
-  const rankedArticles = sortByRelevance(articles, buildFocusedTerms(query));
+function buildMarketResponse(articles: NewsArticle[]): NewsResponse {
+  const rankedArticles = sortByRelevance(articles, buildFocusedTerms("markets"));
+
+  if (rankedArticles.length === 0) {
+    return {
+      query: "markets",
+      kind: "context",
+      articles: [],
+      data_status: "partial",
+      warnings: ["No market-wide headlines are available right now."],
+    };
+  }
+
   return {
-    query,
+    query: "markets",
     kind: "context",
-    articles: rankedArticles.slice(0, Math.min(articles.length, 10)),
+    articles: rankedArticles.slice(0, Math.min(rankedArticles.length, 10)),
     data_status: "complete",
   };
 }
 
-async function fetchYahooNews(
+function mergeWarnings(
+  existing: string[] | undefined,
+  additions: string[] | undefined,
+): string[] | undefined {
+  const merged = [...(existing ?? []), ...(additions ?? [])]
+    .map((warning) => warning.trim())
+    .filter(Boolean);
+  return merged.length ? Array.from(new Set(merged)) : undefined;
+}
+
+function withResponseMetadata(
+  response: NewsResponse,
+  metadata: {
+    provider?: string;
+    source_mode?: "query_feed" | "broad_feed";
+    warnings?: string[];
+    replaceWarnings?: boolean;
+  },
+): NewsResponse {
+  return {
+    ...response,
+    provider: metadata.provider ?? response.provider,
+    source_mode: metadata.source_mode ?? response.source_mode,
+    warnings: metadata.replaceWarnings
+      ? mergeWarnings(undefined, metadata.warnings)
+      : mergeWarnings(response.warnings, metadata.warnings),
+  };
+}
+
+function getResponseRelevanceScore(response: NewsResponse, query: string): number {
+  const terms = buildFocusedTerms(query);
+  return response.articles[0] ? getArticleScore(response.articles[0], terms) : 0;
+}
+
+function shouldReplaceYahooFocusedResult(
+  query: string,
+  yahooResponse: NewsResponse,
+  finnhubResponse: NewsResponse,
+): boolean {
+  if (finnhubResponse.articles.length === 0) {
+    return false;
+  }
+
+  const yahooScore = getResponseRelevanceScore(yahooResponse, query);
+  const finnhubScore = getResponseRelevanceScore(finnhubResponse, query);
+
+  if (finnhubScore !== yahooScore) {
+    return finnhubScore > yahooScore;
+  }
+
+  if (finnhubResponse.data_status !== yahooResponse.data_status) {
+    return finnhubResponse.data_status === "complete";
+  }
+
+  if (finnhubResponse.articles.length !== yahooResponse.articles.length) {
+    return finnhubResponse.articles.length > yahooResponse.articles.length;
+  }
+
+  return yahooResponse.articles.length === 0 && finnhubResponse.articles.length > 0;
+}
+
+function warnFallback(message: string, error?: unknown): void {
+  if (error instanceof Error && error.message) {
+    console.warn(`${message}: ${error.message}`);
+    return;
+  }
+
+  console.warn(message);
+}
+
+function shouldAttemptFinnhubCompanyFallback(query: string): boolean {
+  const trimmed = query.trim();
+  if (!trimmed || /\s/.test(trimmed)) {
+    return false;
+  }
+
+  if (trimmed !== trimmed.toUpperCase()) {
+    return false;
+  }
+
+  if (!/^[A-Z0-9.-]{1,6}$/.test(trimmed)) {
+    return false;
+  }
+
+  return !["BTC", "ETH", "GOLD", "SILVER", "WTI", "BRENT", "CPI", "GDP"].includes(trimmed);
+}
+
+function shouldAttemptFinnhubTopicFallback(query: string): boolean {
+  const normalized = normalizeNewsQuery(query).toLowerCase();
+
+  if (!normalized || shouldAttemptFinnhubCompanyFallback(query)) {
+    return false;
+  }
+
+  return !GENERIC_FOCUSED_QUERY_BLOCKLIST.has(normalized);
+}
+
+function getFocusedFallbackStrategy(query: string, finnhubKey: string | null): FocusedFallbackStrategy | null {
+  if (!finnhubKey) {
+    return null;
+  }
+
+  if (shouldAttemptFinnhubCompanyFallback(query)) {
+    return {
+      kind: "company",
+      label: "Finnhub company news",
+      source_mode: "query_feed",
+    };
+  }
+
+  if (shouldAttemptFinnhubTopicFallback(query)) {
+    return {
+      kind: "topic",
+      label: "Finnhub general market news",
+      source_mode: "broad_feed",
+    };
+  }
+
+  return null;
+}
+
+function getFallbackAttemptWarning(query: string, strategy: FocusedFallbackStrategy): string {
+  return strategy.kind === "company"
+    ? `Yahoo focused headlines for "${query}" looked weak, so a Finnhub company-news fallback was used.`
+    : `Yahoo focused headlines for "${query}" looked weak, so a Finnhub general-news fallback was used.`;
+}
+
+function getFallbackUnavailabilityWarning(query: string): string {
+  return `The focused Yahoo feed for "${query}" looks weak, and no Finnhub fallback is configured right now.`;
+}
+
+function getFallbackNoImprovementWarning(query: string, strategy: FocusedFallbackStrategy): string {
+  return strategy.kind === "company"
+    ? `Yahoo focused headlines for "${query}" stayed as the best available result after a Finnhub company-news fallback check.`
+    : `Yahoo focused headlines for "${query}" stayed as the best available result after a Finnhub general-news fallback check.`;
+}
+
+function getFallbackFailureWarning(query: string, strategy: FocusedFallbackStrategy): string {
+  return strategy.kind === "company"
+    ? `Yahoo focused headlines for "${query}" are weak, and the Finnhub company-news fallback failed.`
+    : `Yahoo focused headlines for "${query}" are weak, and the Finnhub general-news fallback failed.`;
+}
+
+async function fetchFocusedFinnhubFallback(
   query: string,
   limit: number,
-): Promise<NewsArticle[]> {
-  const normalized = normalizeQuery(query);
-  const url = `https://finance.yahoo.com/rss/headline?s=${encodeURIComponent(normalized)}`;
+  strategy: FocusedFallbackStrategy,
+  apiKey: string,
+): Promise<NewsResponse> {
+  const articles =
+    strategy.kind === "company"
+      ? await fetchFinnhubCompanyNews(query, limit, apiKey)
+      : await fetchFinnhubMarketNews(Math.max(limit, 10), apiKey);
 
-  try {
-    const xml = await fetchText(url, {
-      revalidate: NEWS_REVALIDATE_SECONDS,
-      timeoutMs: NEWS_TIMEOUT_MS,
-    });
-    return parseRss(xml).slice(0, Math.max(limit * 3, limit));
-  } catch {
-    throw new ServiceError(503, {
-      error: "upstream_unavailable",
-      provider: "yahoo_news",
-    });
-  }
+  return withResponseMetadata(
+    trimResponseArticles(buildFocusedResponse(query, articles), limit),
+    {
+      provider: "finnhub",
+      source_mode: strategy.source_mode,
+    },
+  );
 }
 
 export async function getFocusedNews(
   query: string,
   limit: number = 10,
 ): Promise<NewsResponse> {
-  const normalized = normalizeQuery(query);
-  const articles = await fetchYahooNews(normalized, limit);
-  const response = buildFocusedResponse(normalized, articles);
-  return {
-    ...response,
-    articles: response.articles.slice(0, limit),
-  };
+  const normalized = normalizeNewsQuery(query);
+  const finnhubKey = getFinnhubApiKey();
+  const fallbackStrategy = getFocusedFallbackStrategy(query, finnhubKey);
+  let yahooError: unknown;
+
+  try {
+    const yahooArticles = await fetchYahooNews(normalized, limit);
+    const yahooResponse = withResponseMetadata(
+      trimResponseArticles(buildFocusedResponse(normalized, yahooArticles), limit),
+      {
+        provider: "yahoo",
+        source_mode: "query_feed",
+      },
+    );
+
+    if (yahooResponse.data_status === "complete") {
+      return yahooResponse;
+    }
+
+    if (!fallbackStrategy) {
+      return finnhubKey
+        ? yahooResponse
+        : withResponseMetadata(yahooResponse, {
+            warnings: [getFallbackUnavailabilityWarning(normalized)],
+          });
+    }
+
+    const fallbackApiKey = finnhubKey!;
+    warnFallback(`Yahoo focused news for "${normalized}" was weak, trying ${fallbackStrategy.label}`);
+
+    try {
+      const finnhubResponse = await fetchFocusedFinnhubFallback(
+        normalized,
+        limit,
+        fallbackStrategy,
+        fallbackApiKey,
+      );
+
+      return shouldReplaceYahooFocusedResult(normalized, yahooResponse, finnhubResponse)
+        ? withResponseMetadata(finnhubResponse, {
+            warnings: [getFallbackAttemptWarning(normalized, fallbackStrategy)],
+            replaceWarnings: true,
+          })
+        : withResponseMetadata(yahooResponse, {
+            warnings: [getFallbackNoImprovementWarning(normalized, fallbackStrategy)],
+            replaceWarnings: true,
+          });
+    } catch (error) {
+      warnFallback(
+        `${fallbackStrategy.label} fallback failed for "${normalized}", returning Yahoo result`,
+        error,
+      );
+      return withResponseMetadata(yahooResponse, {
+        warnings: [getFallbackFailureWarning(normalized, fallbackStrategy)],
+        replaceWarnings: true,
+      });
+    }
+  } catch (error) {
+    yahooError = error;
+  }
+
+  if (!fallbackStrategy) {
+    throw yahooError instanceof Error
+      ? yahooError
+      : new ServiceError(503, {
+          error: "upstream_unavailable",
+          provider: "news",
+        });
+  }
+
+  warnFallback(
+    `Yahoo focused news failed for "${normalized}", trying ${fallbackStrategy.label}`,
+    yahooError,
+  );
+
+  const fallbackApiKey = finnhubKey!;
+  try {
+    const finnhubResponse = withResponseMetadata(
+      await fetchFocusedFinnhubFallback(normalized, limit, fallbackStrategy, fallbackApiKey),
+      {
+        warnings: [
+          fallbackStrategy.kind === "company"
+            ? `Yahoo focused headlines for "${normalized}" were unavailable, so a Finnhub company-news fallback was used.`
+            : `Yahoo focused headlines for "${normalized}" were unavailable, so a Finnhub general-news fallback was used.`,
+        ],
+        replaceWarnings: true,
+      },
+    );
+
+    if (finnhubResponse.articles.length > 0 || finnhubResponse.warnings?.length) {
+      return finnhubResponse;
+    }
+  } catch (error) {
+    warnFallback(
+      `${fallbackStrategy.label} fallback failed for "${normalized}" after Yahoo failure`,
+      error,
+    );
+  }
+
+  throw yahooError instanceof Error
+    ? yahooError
+    : new ServiceError(503, {
+        error: "upstream_unavailable",
+        provider: "news",
+      });
 }
 
 export async function getContextNews(
   query: string,
   limit: number = 10,
 ): Promise<NewsResponse> {
-  const normalized = normalizeQuery(query);
-  const articles = await fetchYahooNews(normalized, limit);
-  const response = buildContextResponse(normalized, articles);
+  const normalized = normalizeContextNewsQuery(normalizeNewsQuery(query));
+  const broadResult = await getBroadNewsContext(
+    {
+      query: normalized,
+      dashboard_context: "general",
+      limit,
+    },
+  );
+
   return {
-    ...response,
-    articles: response.articles.slice(0, limit),
+    query: normalized,
+    kind: "context",
+    resolved_query: broadResult.chosen_query,
+    theme_id: broadResult.theme_id,
+    provider: broadResult.provider,
+    source_mode: broadResult.source_mode,
+    articles: broadResult.articles.slice(0, limit),
+    warnings: broadResult.warnings,
+    data_status: broadResult.data_status,
   };
+}
+
+export async function getMarketNews(limit: number = 10): Promise<NewsResponse> {
+  const finnhubKey = getFinnhubApiKey();
+
+  if (finnhubKey) {
+    try {
+      const finnhubArticles = await fetchFinnhubMarketNews(limit, finnhubKey);
+      const finnhubResponse = trimResponseArticles(
+        buildMarketResponse(finnhubArticles),
+        limit,
+      );
+
+      if (finnhubResponse.articles.length > 0) {
+        return finnhubResponse;
+      }
+
+      warnFallback("Finnhub market news returned no articles, falling back to Yahoo markets");
+    } catch (error) {
+      warnFallback("Finnhub market news failed, falling back to Yahoo markets", error);
+    }
+  } else {
+    warnFallback("FINNHUB_API_KEY is not set, falling back to Yahoo markets");
+  }
+
+  const yahooArticles = await fetchYahooNews("markets", limit);
+  return trimResponseArticles(buildMarketResponse(yahooArticles), limit);
 }
 
 export async function getNews(

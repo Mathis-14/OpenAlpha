@@ -245,7 +245,7 @@ export interface FilingsResponse {
   data_status?: "complete" | "partial";
 }
 
-// ── News (Yahoo RSS) ────────────────────────────────────────────────────────
+// ── News ────────────────────────────────────────────────────────────────────
 
 export interface NewsArticle {
   title: string;
@@ -259,6 +259,10 @@ export interface NewsResponse {
   query: string;
   kind: "focused" | "context";
   articles: NewsArticle[];
+  resolved_query?: string;
+  theme_id?: string;
+  provider?: string;
+  source_mode?: "broad_feed" | "query_feed";
   warnings?: string[];
   data_status?: "complete" | "partial";
 }
