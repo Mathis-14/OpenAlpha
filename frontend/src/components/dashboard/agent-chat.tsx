@@ -78,6 +78,15 @@ interface DisplayDownloadEntry {
   description: string;
 }
 
+interface DisplayAboutEntry {
+  type: "display_about";
+  href: string;
+  label: string;
+  description: string;
+  githubHref: string;
+  linkedinHref: string;
+}
+
 type ChatEntry =
   | ToolCallEntry
   | ToolResultEntry
@@ -85,7 +94,8 @@ type ChatEntry =
   | ErrorEntry
   | DisplayMetricEntry
   | DisplayChartEntry
-  | DisplayDownloadEntry;
+  | DisplayDownloadEntry
+  | DisplayAboutEntry;
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -693,6 +703,19 @@ function sseToEntry(sse: AgentSSE): ChatEntry | null {
           (sse.data.description as string) ??
           "Open the prefilled data export tool.",
       };
+    case "display_about":
+      return {
+        type: "display_about",
+        href: (sse.data.href as string) ?? "/about",
+        label: (sse.data.label as string) ?? "About Alpha",
+        description:
+          (sse.data.description as string) ??
+          "Learn more about OpenAlpha and its creator.",
+        githubHref: (sse.data.github_href as string) ?? "https://github.com/Mathis-14",
+        linkedinHref:
+          (sse.data.linkedin_href as string) ??
+          "https://www.linkedin.com/in/mathis-villaret",
+      };
     case "error":
       return {
         type: "error",
@@ -875,6 +898,9 @@ function MessageBubble({
   const displayDownloads = entries.filter(
     (e): e is DisplayDownloadEntry => e.type === "display_download",
   );
+  const displayAboutCards = entries.filter(
+    (e): e is DisplayAboutEntry => e.type === "display_about",
+  );
   const errorEntries = entries.filter(
     (e): e is ErrorEntry => e.type === "error",
   );
@@ -956,6 +982,14 @@ function MessageBubble({
           entry={entry}
           variant={variant}
           onOpen={() => onOpenDownload(entry.href)}
+        />
+      ))}
+
+      {displayAboutCards.map((entry, i) => (
+        <AboutSuggestionCard
+          key={`about-${i}`}
+          entry={entry}
+          variant={variant}
         />
       ))}
 
@@ -1066,6 +1100,92 @@ function DownloadSuggestionCard({
           {entry.label}
           <ArrowUpRight className="h-4 w-4" />
         </button>
+      </div>
+    </div>
+  );
+}
+
+function AboutSuggestionCard({
+  entry,
+  variant,
+}: {
+  entry: DisplayAboutEntry;
+  variant: "dashboard" | "landing";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-[14px] p-3 text-left",
+        variant === "landing" || variant === "dashboard"
+          ? "border border-black/[0.08] bg-[#f4f8ff]"
+          : "border border-white/[0.08] bg-white/[0.03]",
+      )}
+    >
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <p
+            className={cn(
+              "inline-flex items-center gap-2 text-[11px] font-normal uppercase tracking-[0.2em]",
+              variant === "landing" || variant === "dashboard"
+                ? "text-black/54"
+                : "text-white/52",
+            )}
+          >
+            <ArrowUpRight className="h-3.5 w-3.5" />
+            About OpenAlpha
+          </p>
+          <p
+            className={cn(
+              "text-sm",
+              variant === "landing" || variant === "dashboard"
+                ? "text-black/76"
+                : "text-white/78",
+            )}
+          >
+            {entry.description}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={entry.href}
+            className={cn(
+              "inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] px-4 text-sm font-medium transition-colors",
+              variant === "landing" || variant === "dashboard"
+                ? "border border-black/[0.08] bg-[#1080ff] text-white hover:bg-[#006fe6]"
+                : "border border-white/[0.1] bg-white text-black hover:bg-white/92",
+            )}
+          >
+            {entry.label}
+            <ArrowUpRight className="h-4 w-4" />
+          </a>
+          <a
+            href={entry.githubHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "inline-flex h-9 items-center justify-center rounded-[10px] border px-4 text-sm transition-colors",
+              variant === "landing" || variant === "dashboard"
+                ? "border-black/[0.08] bg-white text-black/72 hover:bg-[#eef5ff] hover:text-[#161616]"
+                : "border-white/[0.1] bg-transparent text-white/80 hover:bg-white/10 hover:text-white",
+            )}
+          >
+            GitHub
+          </a>
+          <a
+            href={entry.linkedinHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(
+              "inline-flex h-9 items-center justify-center rounded-[10px] border px-4 text-sm transition-colors",
+              variant === "landing" || variant === "dashboard"
+                ? "border-black/[0.08] bg-white text-black/72 hover:bg-[#eef5ff] hover:text-[#161616]"
+                : "border-white/[0.1] bg-transparent text-white/80 hover:bg-white/10 hover:text-white",
+            )}
+          >
+            LinkedIn
+          </a>
+        </div>
       </div>
     </div>
   );
