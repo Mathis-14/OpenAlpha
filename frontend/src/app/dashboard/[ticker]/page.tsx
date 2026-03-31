@@ -18,7 +18,8 @@ import { buildDataPageHref } from "@/lib/data-export";
 import { ServiceError } from "@/server/shared/errors";
 import { getFilings } from "@/server/filings/service";
 import { getMarketData } from "@/server/market/service";
-import { getNews } from "@/server/news/service";
+import { getDefaultContextNewsQuery } from "@/server/news/queries";
+import { getContextNews, getFocusedNews } from "@/server/news/service";
 import type { MarketResponse } from "@/types/api";
 
 interface DashboardPageProps {
@@ -32,7 +33,7 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
   const { ticker } = await params;
   const symbol = ticker.toUpperCase();
 
-  const [marketResult, newsResult, filingsResult] = await Promise.all([
+  const [marketResult, focusedNewsResult, contextNewsResult, filingsResult] = await Promise.all([
     getMarketData(symbol)
       .then((d) => ({ ok: true as const, data: d }))
       .catch((e: unknown) => ({
@@ -43,7 +44,13 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
             ? e.message
             : "Failed to load market data",
       })),
-    getNews(symbol)
+    getFocusedNews(symbol)
+      .then((data) => ({ ok: true as const, data }))
+      .catch((error: unknown) => ({
+        ok: false as const,
+        status: error instanceof ServiceError ? error.status : 500,
+      })),
+    getContextNews(getDefaultContextNewsQuery())
       .then((data) => ({ ok: true as const, data }))
       .catch((error: unknown) => ({
         ok: false as const,
@@ -71,15 +78,28 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
           : "Something went wrong loading market data.";
   }
 
-  const newsError =
-    newsResult.ok || newsResult.status === 404
+  const focusedNewsError =
+    focusedNewsResult.ok || focusedNewsResult.status === 404
       ? null
-      : "News is temporarily unavailable. Try again in a moment.";
+      : "Company news is temporarily unavailable. Try again in a moment.";
+  const contextNewsError =
+    contextNewsResult.ok || contextNewsResult.status === 404
+      ? null
+      : "Broader market context is temporarily unavailable. Try again in a moment.";
   const filingsError =
     filingsResult.ok || filingsResult.status === 404
       ? null
       : "SEC filings are temporarily unavailable. Try again in a moment.";
-  const news = newsResult.ok ? newsResult.data : { ticker: symbol, articles: [] };
+  const focusedNews = focusedNewsResult.ok
+    ? focusedNewsResult.data
+    : { query: symbol, kind: "focused" as const, articles: [] };
+  const contextNews = contextNewsResult.ok
+    ? contextNewsResult.data
+    : {
+        query: getDefaultContextNewsQuery(),
+        kind: "context" as const,
+        articles: [],
+      };
   const filings = filingsResult.ok
     ? filingsResult.data
     : { ticker: symbol, filings: [] };
@@ -127,7 +147,26 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
 
   const bottomRightWidgets = (
     <div className="h-[520px] min-h-0">
-      <NewsFeed articles={news.articles} error={newsError} fillHeight />
+      <NewsFeed
+        articles={[]}
+        fillHeight
+        sections={[
+          {
+            id: "focused-stock-news",
+            title: "Company News",
+            articles: focusedNews.articles,
+            warnings: focusedNews.warnings,
+            error: focusedNewsError,
+          },
+          {
+            id: "context-stock-news",
+            title: "Broader Market Context",
+            articles: contextNews.articles,
+            warnings: contextNews.warnings,
+            error: contextNewsError,
+          },
+        ]}
+      />
     </div>
   );
 

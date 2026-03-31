@@ -8,6 +8,7 @@ import DashboardOpenedTracker from "@/components/dashboard-opened-tracker";
 import CryptoOverviewGrid from "@/components/dashboard/crypto-overview-grid";
 import CryptoPriceChart from "@/components/dashboard/crypto-price-chart";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
+import NewsFeed from "@/components/dashboard/news-feed";
 import DownloadDataLink from "@/components/download-data-link";
 import RequestQuotaBadge from "@/components/request-quota-badge";
 import {
@@ -17,7 +18,9 @@ import {
 import { getCryptoMarketMeta } from "@/lib/crypto";
 import { formatUtcDate } from "@/lib/date-format";
 import { buildDataPageHref } from "@/lib/data-export";
+import { getDefaultContextNewsQuery, getFocusedNewsQueryForCrypto } from "@/server/news/queries";
 import { ServiceError } from "@/server/shared/errors";
+import { getContextNews, getFocusedNews } from "@/server/news/service";
 import type { CryptoInstrument, CryptoRange } from "@/types/api";
 
 export const runtime = "nodejs";
@@ -52,16 +55,33 @@ export default async function CryptoInstrumentPage({
   const resolved = await params;
   const instrument = parseCryptoInstrument(resolved.instrument);
 
-  const marketResult = await getCryptoMarketData(instrument, DEFAULT_RANGE)
-    .then((data) => ({ ok: true as const, data }))
-    .catch((error: unknown) => ({
-      ok: false as const,
-      status: error instanceof ServiceError ? error.status : 500,
-      message:
-        error instanceof ServiceError
-          ? error.message
-          : "Failed to load crypto market data",
-    }));
+  const focusedNewsQuery = getFocusedNewsQueryForCrypto(instrument);
+  const contextNewsQuery = getDefaultContextNewsQuery();
+
+  const [marketResult, focusedNewsResult, contextNewsResult] = await Promise.all([
+    getCryptoMarketData(instrument, DEFAULT_RANGE)
+      .then((data) => ({ ok: true as const, data }))
+      .catch((error: unknown) => ({
+        ok: false as const,
+        status: error instanceof ServiceError ? error.status : 500,
+        message:
+          error instanceof ServiceError
+            ? error.message
+            : "Failed to load crypto market data",
+      })),
+    getFocusedNews(focusedNewsQuery)
+      .then((data) => ({ ok: true as const, data }))
+      .catch((error: unknown) => ({
+        ok: false as const,
+        status: error instanceof ServiceError ? error.status : 500,
+      })),
+    getContextNews(contextNewsQuery)
+      .then((data) => ({ ok: true as const, data }))
+      .catch((error: unknown) => ({
+        ok: false as const,
+        status: error instanceof ServiceError ? error.status : 500,
+      })),
+  ]);
 
   const overview = marketResult.ok ? marketResult.data.overview : null;
   const initialHistory = marketResult.ok ? marketResult.data.price_history : [];
@@ -73,6 +93,20 @@ export default async function CryptoInstrumentPage({
       : marketResult.status === 503
         ? "Deribit market data is temporarily unavailable. Try again in a moment."
         : "Something went wrong loading crypto market data.";
+  const focusedNewsError =
+    focusedNewsResult.ok || focusedNewsResult.status === 404
+      ? null
+      : "Crypto news is temporarily unavailable. Try again in a moment.";
+  const contextNewsError =
+    contextNewsResult.ok || contextNewsResult.status === 404
+      ? null
+      : "Broader market context is temporarily unavailable. Try again in a moment.";
+  const focusedNews = focusedNewsResult.ok
+    ? focusedNewsResult.data
+    : { query: focusedNewsQuery, kind: "focused" as const, articles: [] };
+  const contextNews = contextNewsResult.ok
+    ? contextNewsResult.data
+    : { query: contextNewsQuery, kind: "context" as const, articles: [] };
 
   const topWidgets = overview ? (
     <CryptoOverviewGrid key="crypto-overview" overview={overview} />
@@ -100,7 +134,7 @@ export default async function CryptoInstrumentPage({
     />
   ) : null;
 
-  const bottomWidgets = overview ? (
+  const detailsWidget = overview ? (
     <Card
       key="crypto-metadata"
       className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
@@ -160,6 +194,31 @@ export default async function CryptoInstrumentPage({
       </CardContent>
     </Card>
   ) : null;
+
+  const newsWidget = (
+    <div className="h-[520px] min-h-0">
+      <NewsFeed
+        articles={[]}
+        fillHeight
+        sections={[
+          {
+            id: "crypto-focused-news",
+            title: "Crypto News",
+            articles: focusedNews.articles,
+            warnings: focusedNews.warnings,
+            error: focusedNewsError,
+          },
+          {
+            id: "crypto-context-news",
+            title: "Broader Market Context",
+            articles: contextNews.articles,
+            warnings: contextNews.warnings,
+            error: contextNewsError,
+          },
+        ]}
+      />
+    </div>
+  );
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafcff]">
@@ -228,7 +287,8 @@ export default async function CryptoInstrumentPage({
         <DashboardLayout
           topWidgets={topWidgets}
           chartWidget={chartWidget}
-          bottomWidgets={bottomWidgets}
+          bottomLeftWidgets={detailsWidget}
+          bottomRightWidgets={newsWidget}
           agentPanel={
             <AgentChat
               key={`crypto-agent-${instrument}`}
