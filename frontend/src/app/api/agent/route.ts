@@ -1,6 +1,6 @@
 import { isCommodityInstrument } from "@/lib/commodities";
 import type { CommodityInstrumentSlug, CryptoInstrument } from "@/types/api";
-import { runAgent } from "@/server/agent/service";
+import { getDeterministicAgentReply, runAgent } from "@/server/agent/service";
 import { assertQuotaAvailable, decrementUsageQuota } from "@/server/usage/adapter";
 
 export const runtime = "nodejs";
@@ -22,7 +22,7 @@ type AgentRouteRequest = {
   commodity_instrument?: unknown;
 };
 
-function normalizeRequest(body: AgentRouteRequest) {
+export function normalizeRequest(body: AgentRouteRequest) {
   const query = typeof body.query === "string" ? body.query.trim() : "";
   if (!query || query.length > 2_000) {
     return null;
@@ -76,7 +76,10 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: "invalid_request" }, { status: 422 });
   }
 
-  if (!process.env.MISTRAL_API_KEY?.trim()) {
+  if (
+    !process.env.MISTRAL_API_KEY?.trim() &&
+    !getDeterministicAgentReply(normalized)
+  ) {
     return Response.json(
       {
         error: "agent_unavailable",

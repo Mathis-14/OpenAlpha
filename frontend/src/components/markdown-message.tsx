@@ -40,13 +40,20 @@ function hasBalancedMathDelimiters(content: string): boolean {
   );
 }
 
-function shouldUseMath(content: string, streaming: boolean): boolean {
+function hasLikelyInlineMath(content: string): boolean {
+  return /(^|[^\\])\$[^$\n]*[A-Za-z\\][^$\n]*\$/m.test(content);
+}
+
+export function shouldUseMath(content: string, streaming: boolean): boolean {
   if (streaming) {
     return false;
   }
 
   const mightContainMath =
-    content.includes("$") || content.includes("\\(") || content.includes("\\[");
+    content.includes("$$") ||
+    content.includes("\\(") ||
+    content.includes("\\[") ||
+    hasLikelyInlineMath(content);
 
   return mightContainMath && hasBalancedMathDelimiters(content);
 }

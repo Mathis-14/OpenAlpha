@@ -8,6 +8,7 @@ import AgentChat from "@/components/dashboard/agent-chat";
 import DashboardOpenedTracker from "@/components/dashboard-opened-tracker";
 import DashboardLayout from "@/components/dashboard/dashboard-layout";
 import DownloadDataLink from "@/components/download-data-link";
+import NewsFeed from "@/components/dashboard/news-feed";
 import RequestQuotaBadge from "@/components/request-quota-badge";
 import MacroChart from "@/components/dashboard/macro-chart";
 import MacroOverviewGrid from "@/components/dashboard/macro-overview-grid";
@@ -17,6 +18,9 @@ import {
   getMacroIndicator,
   getMacroSnapshotForCountry,
 } from "@/server/macro/service";
+import { getDefaultContextNewsQuery, getFocusedNewsQueryForMacro } from "@/server/news/queries";
+import { getContextNews, getFocusedNews } from "@/server/news/service";
+import { ServiceError } from "@/server/shared/errors";
 import type {
   MacroCountry,
   MacroHistoryRange,
@@ -41,7 +45,10 @@ export default async function MacroPage({
   const params = searchParams ? await searchParams : undefined;
   const country: MacroCountry = params?.country === "fr" ? "fr" : "us";
 
-  const [snapshotResult, seriesResult] = await Promise.all([
+  const focusedNewsQuery = getFocusedNewsQueryForMacro(country);
+  const contextNewsQuery = getDefaultContextNewsQuery();
+
+  const [snapshotResult, seriesResult, focusedNewsResult, contextNewsResult] = await Promise.all([
     getMacroSnapshotForCountry(country)
       .then((data) => ({ ok: true as const, data }))
       .catch((error: unknown) => ({
@@ -62,6 +69,18 @@ export default async function MacroPage({
             ? error.message
             : "Failed to load macro history",
       })),
+    getFocusedNews(focusedNewsQuery)
+      .then((data) => ({ ok: true as const, data }))
+      .catch((error: unknown) => ({
+        ok: false as const,
+        status: error instanceof ServiceError ? error.status : 500,
+      })),
+    getContextNews(contextNewsQuery)
+      .then((data) => ({ ok: true as const, data }))
+      .catch((error: unknown) => ({
+        ok: false as const,
+        status: error instanceof ServiceError ? error.status : 500,
+      })),
   ]);
 
   const snapshot = snapshotResult.ok ? snapshotResult.data : null;
@@ -73,6 +92,20 @@ export default async function MacroPage({
     : snapshotResult.status === 503
       ? "The macro data provider is temporarily unavailable. Try again in a moment."
       : "Something went wrong loading macro data.";
+  const focusedNewsError =
+    focusedNewsResult.ok || focusedNewsResult.status === 404
+      ? null
+      : "Focused macro news is temporarily unavailable. Try again in a moment.";
+  const contextNewsError =
+    contextNewsResult.ok || contextNewsResult.status === 404
+      ? null
+      : "Broader market context is temporarily unavailable. Try again in a moment.";
+  const focusedNews = focusedNewsResult.ok
+    ? focusedNewsResult.data
+    : { query: focusedNewsQuery, kind: "focused" as const, articles: [] };
+  const contextNews = contextNewsResult.ok
+    ? contextNewsResult.data
+    : { query: contextNewsQuery, kind: "context" as const, articles: [] };
 
   const topWidgets = (
     <>
@@ -148,6 +181,31 @@ export default async function MacroPage({
     </Card>
   );
 
+  const bottomWidgets = (
+    <div className="h-[520px] min-h-0">
+      <NewsFeed
+        articles={[]}
+        fillHeight
+        sections={[
+          {
+            id: "macro-focused-news",
+            title: "Macro Focus",
+            articles: focusedNews.articles,
+            warnings: focusedNews.warnings,
+            error: focusedNewsError,
+          },
+          {
+            id: "macro-context-news",
+            title: "Broader Market Context",
+            articles: contextNews.articles,
+            warnings: contextNews.warnings,
+            error: contextNewsError,
+          },
+        ]}
+      />
+    </div>
+  );
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafcff]">
       <LandingSpotlight />
@@ -194,6 +252,7 @@ export default async function MacroPage({
         <DashboardLayout
           topWidgets={topWidgets}
           chartWidget={chartWidget}
+          bottomWidgets={bottomWidgets}
           agentPanel={
             <AgentChat
               key={`macro-agent-${country}`}

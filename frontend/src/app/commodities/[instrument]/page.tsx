@@ -9,6 +9,7 @@ import AgentChat from "@/components/dashboard/agent-chat";
 import DashboardOpenedTracker from "@/components/dashboard-opened-tracker";
 import CommodityOverviewGrid from "@/components/dashboard/commodity-overview-grid";
 import CommodityPriceChart from "@/components/dashboard/commodity-price-chart";
+import NewsFeed from "@/components/dashboard/news-feed";
 import DownloadDataLink from "@/components/download-data-link";
 import RequestQuotaBadge from "@/components/request-quota-badge";
 import { buildDataPageHref } from "@/lib/data-export";
@@ -21,6 +22,8 @@ import {
   getCommodityMarketData,
   parseCommodityInstrument,
 } from "@/server/commodities/service";
+import { getDefaultContextNewsQuery, getFocusedNewsQueryForCommodity } from "@/server/news/queries";
+import { getContextNews, getFocusedNews } from "@/server/news/service";
 import { ServiceError } from "@/server/shared/errors";
 import type { CommodityRange } from "@/types/api";
 
@@ -47,16 +50,33 @@ export default async function CommodityInstrumentPage({
   const resolved = await params;
   const instrument = parseCommodityInstrument(resolved.instrument);
 
-  const marketResult = await getCommodityMarketData(instrument, DEFAULT_RANGE)
-    .then((data) => ({ ok: true as const, data }))
-    .catch((error: unknown) => ({
-      ok: false as const,
-      status: error instanceof ServiceError ? error.status : 500,
-      message:
-        error instanceof ServiceError
-          ? error.message
-          : "Failed to load commodity market data",
-    }));
+  const focusedNewsQuery = getFocusedNewsQueryForCommodity(instrument);
+  const contextNewsQuery = getDefaultContextNewsQuery();
+
+  const [marketResult, focusedNewsResult, contextNewsResult] = await Promise.all([
+    getCommodityMarketData(instrument, DEFAULT_RANGE)
+      .then((data) => ({ ok: true as const, data }))
+      .catch((error: unknown) => ({
+        ok: false as const,
+        status: error instanceof ServiceError ? error.status : 500,
+        message:
+          error instanceof ServiceError
+            ? error.message
+            : "Failed to load commodity market data",
+      })),
+    getFocusedNews(focusedNewsQuery)
+      .then((data) => ({ ok: true as const, data }))
+      .catch((error: unknown) => ({
+        ok: false as const,
+        status: error instanceof ServiceError ? error.status : 500,
+      })),
+    getContextNews(contextNewsQuery)
+      .then((data) => ({ ok: true as const, data }))
+      .catch((error: unknown) => ({
+        ok: false as const,
+        status: error instanceof ServiceError ? error.status : 500,
+      })),
+  ]);
 
   const overview = marketResult.ok ? marketResult.data.overview : null;
   const initialHistory = marketResult.ok ? marketResult.data.price_history : [];
@@ -68,6 +88,20 @@ export default async function CommodityInstrumentPage({
       : marketResult.status === 503
         ? "Commodity market data is temporarily unavailable. Try again in a moment."
         : "Something went wrong loading commodity market data.";
+  const focusedNewsError =
+    focusedNewsResult.ok || focusedNewsResult.status === 404
+      ? null
+      : "Commodity news is temporarily unavailable. Try again in a moment.";
+  const contextNewsError =
+    contextNewsResult.ok || contextNewsResult.status === 404
+      ? null
+      : "Broader market context is temporarily unavailable. Try again in a moment.";
+  const focusedNews = focusedNewsResult.ok
+    ? focusedNewsResult.data
+    : { query: focusedNewsQuery, kind: "focused" as const, articles: [] };
+  const contextNews = contextNewsResult.ok
+    ? contextNewsResult.data
+    : { query: contextNewsQuery, kind: "context" as const, articles: [] };
 
   const topWidgets = overview ? (
     <CommodityOverviewGrid key="commodity-overview" overview={overview} />
@@ -95,7 +129,7 @@ export default async function CommodityInstrumentPage({
     />
   ) : null;
 
-  const bottomWidgets = overview ? (
+  const detailsWidget = overview ? (
     <Card
       key="commodity-details"
       className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
@@ -128,6 +162,31 @@ export default async function CommodityInstrumentPage({
       </CardContent>
     </Card>
   ) : null;
+
+  const newsWidget = (
+    <div className="h-[520px] min-h-0">
+      <NewsFeed
+        articles={[]}
+        fillHeight
+        sections={[
+          {
+            id: "commodity-focused-news",
+            title: "Commodity News",
+            articles: focusedNews.articles,
+            warnings: focusedNews.warnings,
+            error: focusedNewsError,
+          },
+          {
+            id: "commodity-context-news",
+            title: "Broader Market Context",
+            articles: contextNews.articles,
+            warnings: contextNews.warnings,
+            error: contextNewsError,
+          },
+        ]}
+      />
+    </div>
+  );
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#fafcff]">
@@ -180,7 +239,8 @@ export default async function CommodityInstrumentPage({
         <DashboardLayout
           topWidgets={topWidgets}
           chartWidget={chartWidget}
-          bottomWidgets={bottomWidgets}
+          bottomLeftWidgets={detailsWidget}
+          bottomRightWidgets={newsWidget}
           agentPanel={
             <AgentChat
               key={`commodity-agent-${instrument}`}

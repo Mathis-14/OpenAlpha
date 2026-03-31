@@ -256,8 +256,11 @@ export interface NewsArticle {
 }
 
 export interface NewsResponse {
-  ticker: string;
+  query: string;
+  kind: "focused" | "context";
   articles: NewsArticle[];
+  warnings?: string[];
+  data_status?: "complete" | "partial";
 }
 
 // ── Agent (Mistral) ─────────────────────────────────────────────────────────
@@ -277,6 +280,7 @@ export type AgentEventType =
   | "text_delta"
   | "display_chart"
   | "display_metric"
+  | "display_about"
   | "display_download"
   | "display_table"
   | "text"
