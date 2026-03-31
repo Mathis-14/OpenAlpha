@@ -175,6 +175,8 @@ export default async function CommodityInstrumentPage({
             articles: focusedNews.articles,
             warnings: focusedNews.warnings,
             error: focusedNewsError,
+            emptyStateMessage:
+              "No specific news on this asset. Broader market news is shown below.",
           },
           {
             id: "commodity-context-news",
@@ -241,6 +243,7 @@ export default async function CommodityInstrumentPage({
           chartWidget={chartWidget}
           bottomLeftWidgets={detailsWidget}
           bottomRightWidgets={newsWidget}
+          splitBottomColumns="equal"
           agentPanel={
             <AgentChat
               key={`commodity-agent-${instrument}`}

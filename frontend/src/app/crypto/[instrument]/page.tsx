@@ -207,6 +207,8 @@ export default async function CryptoInstrumentPage({
             articles: focusedNews.articles,
             warnings: focusedNews.warnings,
             error: focusedNewsError,
+            emptyStateMessage:
+              "No specific news on this asset. Broader market news is shown below.",
           },
           {
             id: "crypto-context-news",
@@ -289,6 +291,7 @@ export default async function CryptoInstrumentPage({
           chartWidget={chartWidget}
           bottomLeftWidgets={detailsWidget}
           bottomRightWidgets={newsWidget}
+          splitBottomColumns="equal"
           agentPanel={
             <AgentChat
               key={`crypto-agent-${instrument}`}

@@ -157,6 +157,8 @@ export default async function DashboardPage({ params }: DashboardPageProps) {
             articles: focusedNews.articles,
             warnings: focusedNews.warnings,
             error: focusedNewsError,
+            emptyStateMessage:
+              "No specific news on this asset. Broader market news is shown below.",
           },
           {
             id: "context-stock-news",

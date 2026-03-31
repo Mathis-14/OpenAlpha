@@ -193,6 +193,8 @@ export default async function MacroPage({
             articles: focusedNews.articles,
             warnings: focusedNews.warnings,
             error: focusedNewsError,
+            emptyStateMessage:
+              "No specific news on this topic. Broader market news is shown below.",
           },
           {
             id: "macro-context-news",

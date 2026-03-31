@@ -10,6 +10,7 @@ interface DashboardLayoutProps {
   bottomRightWidgets?: ReactNode;
   dataWidgets?: ReactNode;
   agentPanel: ReactNode;
+  splitBottomColumns?: "sidebar" | "equal";
 }
 
 export default function DashboardLayout({
@@ -20,6 +21,7 @@ export default function DashboardLayout({
   bottomRightWidgets,
   dataWidgets,
   agentPanel,
+  splitBottomColumns = "sidebar",
 }: DashboardLayoutProps) {
   const topWidgetNodes = Children.toArray(topWidgets);
   const bottomWidgetNodes = Children.toArray(bottomWidgets);
@@ -61,7 +63,13 @@ export default function DashboardLayout({
         </div>
 
         {hasSplitBottomLayout ? (
-          <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div
+            className={`grid items-stretch gap-6 ${
+              splitBottomColumns === "equal"
+                ? "xl:grid-cols-2"
+                : "xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_380px]"
+            }`}
+          >
             <div className="min-w-0 space-y-6">{bottomLeftWidgetNodes}</div>
             <div className="min-w-0 space-y-6">{bottomRightWidgetNodes}</div>
           </div>
