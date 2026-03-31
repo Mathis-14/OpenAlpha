@@ -157,3 +157,48 @@ test("validator rejects unsupported average-volume claims in stock snapshot answ
   assert.equal(result.valid, false);
   assert.match(result.issues.join(" "), /average volume/i);
 });
+
+test("validator rejects broader market backdrop claims without context news", () => {
+  const result = validateAgentAnswer(
+    {
+      query: "What matters most for this stock today?",
+      ticker: "AAPL",
+    },
+    {
+      mode: "analysis",
+      requiredTools: ["get_stock_overview", "get_news", "get_context_news"],
+      allowedTools: ["get_stock_overview", "get_news", "get_context_news"],
+      strictSubject: "ticker",
+      answerGuidance: [],
+    },
+    "AAPL looks steady, but the broader market backdrop still looks risk-off because of geopolitical headlines.",
+    [
+      {
+        name: "get_stock_overview",
+        args: { symbol: "AAPL" },
+        success: true,
+        rawContent: "{}",
+        parsedContent: {
+          current_price: 246.63,
+          change: -2.17,
+        },
+        displays: [],
+      },
+      {
+        name: "get_news",
+        args: { query: "AAPL" },
+        success: true,
+        rawContent: "{}",
+        parsedContent: {
+          query: "AAPL",
+          kind: "focused",
+          articles: [],
+        },
+        displays: [],
+      },
+    ],
+  );
+
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join(" "), /context news/i);
+});

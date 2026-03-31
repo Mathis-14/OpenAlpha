@@ -53,6 +53,29 @@ test("buildDownloadSuggestion returns null for ambiguous macro indicators", () =
   assert.equal(suggestion, null);
 });
 
+test("buildDownloadSuggestion ignores topic-style news tool calls as stock symbol sources", () => {
+  const request: AgentRequest = {
+    query: "What is driving gold today?",
+  };
+
+  const suggestion = buildDownloadSuggestion(request, [
+    {
+      name: "get_news",
+      args: {
+        query: "gold",
+      },
+    },
+    {
+      name: "get_context_news",
+      args: {
+        query: "markets",
+      },
+    },
+  ]);
+
+  assert.equal(suggestion, null);
+});
+
 test("getConversationStarterReply handles vague landing-page greetings", () => {
   const reply = getConversationStarterReply({
     query: "hello",

@@ -101,6 +101,7 @@ export function validateAgentAnswer(
 
   if (
     !toolNames.has("get_news") &&
+    !toolNames.has("get_context_news") &&
     hasPositiveReference(normalizedAnswer, /\b(news|headline|headlines|articles?)\b/i)
   ) {
     issues.push("Do not discuss news or headlines without using the news tool.");
@@ -130,6 +131,16 @@ export function validateAgentAnswer(
       !NEGATED_CAPABILITY_WORDS.test(normalizedAnswer)
     ) {
       issues.push("Do not infer catalysts, earnings, or macro sentiment from a stock snapshot-only answer.");
+    }
+
+    if (
+      !toolNames.has("get_context_news") &&
+      /\b(broader market|market backdrop|geopolitical|risk-off|risk on|tariff|tariffs)\b/i.test(
+        normalizedAnswer,
+      ) &&
+      !NEGATED_CAPABILITY_WORDS.test(normalizedAnswer)
+    ) {
+      issues.push("Do not discuss broader market or geopolitical backdrop without context news.");
     }
   }
 

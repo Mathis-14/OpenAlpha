@@ -25,6 +25,13 @@ import {
   TOOL_DEFINITIONS,
   dispatchToolWithDisplay,
 } from "@/server/agent/tools";
+import {
+  getContextNewsQueryFromPrompt,
+  getFocusedNewsQueryForCommodity,
+  getFocusedNewsQueryForCrypto,
+  getFocusedNewsQueryForMacro,
+  getFocusedNewsQueryForStock,
+} from "@/server/news/queries";
 
 const MISTRAL_CHAT_URL = "https://api.mistral.ai/v1/chat/completions";
 const MAX_TOOL_ROUNDS = 10;
@@ -405,23 +412,39 @@ function buildUserContent(
   commodityInstrument: CommodityInstrumentSlug | null | undefined,
 ): string {
   if (ticker) {
-    return `${query}\n\n[Context: the user is asking about ticker ${ticker.toUpperCase()}]`;
+    const focusedNewsQuery = getFocusedNewsQueryForStock(ticker);
+    const contextNewsQuery = getContextNewsQueryFromPrompt(query);
+    return (
+      `${query}\n\n` +
+      `[Context: the user is asking about ticker ${ticker.toUpperCase()}. ` +
+      `Use get_stock_overview, get_stock_fundamentals, and get_price_history for ${ticker.toUpperCase()} when needed. ` +
+      `For company-specific headlines, use get_news with query='${focusedNewsQuery}'. ` +
+      `For broader market or geopolitical backdrop, use get_context_news with query='${contextNewsQuery}'.]`
+    );
   }
 
   if (dashboardContext === "commodity" && commodityInstrument) {
+    const focusedNewsQuery = getFocusedNewsQueryForCommodity(commodityInstrument);
+    const contextNewsQuery = getContextNewsQueryFromPrompt(query);
     return (
       `${query}\n\n` +
       `[Context: the user is on the commodity dashboard for ${commodityInstrument}. ` +
       `Use get_commodity_overview and get_commodity_price_history for ${commodityInstrument}. ` +
+      `For focused headlines, use get_news with query='${focusedNewsQuery}'. ` +
+      `For broader market or geopolitical backdrop, use get_context_news with query='${contextNewsQuery}'. ` +
       "Keep the answer grounded in this commodity dashboard and its live futures market data.]"
     );
   }
 
   if (dashboardContext === "crypto" && cryptoInstrument) {
+    const focusedNewsQuery = getFocusedNewsQueryForCrypto(cryptoInstrument);
+    const contextNewsQuery = getContextNewsQueryFromPrompt(query);
     return (
       `${query}\n\n` +
       `[Context: the user is on the crypto dashboard for ${cryptoInstrument}. ` +
       `Use get_crypto_overview and get_crypto_price_history for ${cryptoInstrument}. ` +
+      `For focused headlines, use get_news with query='${focusedNewsQuery}'. ` +
+      `For broader market or geopolitical backdrop, use get_context_news with query='${contextNewsQuery}'. ` +
       "Keep the answer grounded in Deribit market data only.]"
     );
   }
@@ -430,12 +453,16 @@ function buildUserContent(
     const normalizedCountry = country === "fr" ? "fr" : "us";
     const countryLabel =
       normalizedCountry === "fr" ? "France" : "the United States";
+    const focusedNewsQuery = getFocusedNewsQueryForMacro(normalizedCountry);
+    const contextNewsQuery = getContextNewsQueryFromPrompt(query);
 
     return (
       `${query}\n\n` +
       `[Context: the user is on the macro dashboard for ${countryLabel}. ` +
       `Use get_macro_snapshot with country='${normalizedCountry}' for broad context, ` +
       `and use get_macro_series with country='${normalizedCountry}' when the user asks about one indicator trend or history. ` +
+      `For focused headlines, use get_news with query='${focusedNewsQuery}' or the relevant indicator topic such as inflation, interest rates, bond yields, or unemployment. ` +
+      `For broader market or geopolitical backdrop, use get_context_news with query='${contextNewsQuery}'. ` +
       "Keep the answer " +
       "grounded in that country unless the user asks to compare or switch countries.]"
     );
@@ -665,7 +692,6 @@ export function buildDownloadSuggestion(
       toolCall.name === "get_stock_overview" ||
       toolCall.name === "get_stock_fundamentals" ||
       toolCall.name === "get_price_history" ||
-      toolCall.name === "get_news" ||
       toolCall.name === "get_sec_filings"
     ) {
       const candidate = toolCall.args.symbol ?? toolCall.args.ticker;

@@ -42,7 +42,7 @@ import {
   getPriceHistory,
   getTickerOverview,
 } from "@/server/market/service";
-import { getNews } from "@/server/news/service";
+import { getContextNews, getNews } from "@/server/news/service";
 
 type ToolDefinition = {
   type: "function";
@@ -528,20 +528,42 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: "get_news",
       description:
-        "Get latest news articles for a stock from Yahoo Finance. Returns headlines, sources, and summaries.",
+        "Get latest focused news from Yahoo Finance. Use a ticker for company news or a topic keyword for focused context like gold, bitcoin, inflation, or natural gas.",
       parameters: {
         type: "object",
         properties: {
-          ticker: {
+          query: {
             type: "string",
-            description: "Ticker symbol",
+            description: "Ticker symbol or focused topic keyword",
           },
           limit: {
             type: "integer",
             description: "Max articles to return (default: 5)",
           },
         },
-        required: ["ticker"],
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_context_news",
+      description:
+        "Get broader market or geopolitical context news from Yahoo Finance. Use topic keywords like markets or geopolitics.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Broad market or geopolitical topic keyword",
+          },
+          limit: {
+            type: "integer",
+            description: "Max articles to return (default: 5)",
+          },
+        },
+        required: ["query"],
       },
     },
   },
@@ -1068,10 +1090,15 @@ export async function dispatchToolWithDisplay(
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 1;
     result = truncateFilings(await getFilings(ticker, formType, limit));
   } else if (name === "get_news") {
-    const ticker = String(argumentsObject.ticker ?? "").trim();
+    const query = String(argumentsObject.query ?? "").trim();
     const rawLimit = Number(argumentsObject.limit ?? 5);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 5;
-    result = await getNews(ticker, limit);
+    result = await getNews(query, limit);
+  } else if (name === "get_context_news") {
+    const query = String(argumentsObject.query ?? "").trim();
+    const rawLimit = Number(argumentsObject.limit ?? 5);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 5;
+    result = await getContextNews(query, limit);
   } else {
     result = { error: `Unknown tool: ${name}` };
   }

@@ -45,7 +45,8 @@ export type ToolName =
   | "get_crypto_overview"
   | "get_crypto_price_history"
   | "get_sec_filings"
-  | "get_news";
+  | "get_news"
+  | "get_context_news";
 
 export type AuditTextExpectation = {
   pattern: RegExp;

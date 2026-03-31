@@ -19,6 +19,7 @@ export const AGENT_TOOL_NAMES = [
   "get_crypto_price_history",
   "get_sec_filings",
   "get_news",
+  "get_context_news",
 ] as const;
 
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[number];
@@ -41,6 +42,8 @@ export type AgentPolicy = {
 const MACRO_TOOLS: AgentToolName[] = [
   "get_macro_snapshot",
   "get_macro_series",
+  "get_news",
+  "get_context_news",
 ];
 
 const GENERAL_TOOLS: AgentToolName[] = [...AGENT_TOOL_NAMES];
@@ -113,6 +116,12 @@ function isNewsQuestion(query: string): boolean {
   return /\b(news|headline|headlines|article|articles|catalyst)\b/i.test(query);
 }
 
+function isDriverQuestion(query: string): boolean {
+  return /\b(driver|drivers|what matters|what moved|what is driving|backdrop|risk|geopolitic|geopolitical)\b/i.test(
+    query,
+  );
+}
+
 function isFilingQuestion(query: string): boolean {
   return /\b(10-k|10-q|filing|risk factors|mda|md&a|sec)\b/i.test(query);
 }
@@ -171,7 +180,7 @@ function mentionsUnsupportedCryptoMarket(query: string): boolean {
 }
 
 function mentionsUnsupportedCryptoSurface(query: string): boolean {
-  return /\b(on-chain|exchange flows|other exchanges|coinbase|binance|token fundamentals?|news)\b/i.test(
+  return /\b(on-chain|exchange flows|other exchanges|coinbase|binance|token fundamentals?)\b/i.test(
     query,
   );
 }
@@ -237,18 +246,23 @@ function buildStockPolicy(request: AgentRequest, query: string): AgentPolicy {
       "get_stock_overview",
       "get_stock_fundamentals",
       "get_news",
+      "get_context_news",
     );
     allowedTools = [
       "get_stock_overview",
       "get_stock_fundamentals",
       "get_news",
+      "get_context_news",
     ];
   } else if (isFilingQuestion(query)) {
     requiredTools.push("get_sec_filings");
     allowedTools = ["get_sec_filings"];
-  } else if (isNewsQuestion(query)) {
+  } else if (isNewsQuestion(query) || isDriverQuestion(query)) {
     requiredTools.push("get_news");
-    allowedTools = ["get_news", "get_stock_overview"];
+    allowedTools = ["get_news", "get_context_news", "get_stock_overview"];
+    if (isDriverQuestion(query)) {
+      requiredTools.push("get_context_news");
+    }
   } else if (isFundamentalsQuestion(query) && /price|stats|overview|key/i.test(query)) {
     requiredTools.push("get_stock_overview", "get_stock_fundamentals");
     allowedTools = ["get_stock_overview", "get_stock_fundamentals"];
@@ -283,6 +297,7 @@ function buildMacroPolicy(request: AgentRequest, query: string): AgentPolicy {
   const indicators = detectMacroIndicators(query);
   const singleIndicator = indicators.length === 1 ? indicators[0] : undefined;
   const explicitSnapshot = isExplicitMacroSnapshotQuery(query);
+  const wantsNewsContext = isNewsQuestion(query) || isDriverQuestion(query);
   const mustUseSeries =
     singleIndicator != null &&
     (!explicitSnapshot ||
@@ -291,10 +306,14 @@ function buildMacroPolicy(request: AgentRequest, query: string): AgentPolicy {
       ));
 
   if (mustUseSeries && singleIndicator) {
+    const newsTools: AgentToolName[] = wantsNewsContext
+      ? ["get_news", "get_context_news"]
+      : [];
+
     return {
       mode: "analysis",
-      requiredTools: ["get_macro_series"],
-      allowedTools: ["get_macro_series"],
+      requiredTools: uniqueTools(["get_macro_series", ...newsTools]),
+      allowedTools: uniqueTools(["get_macro_series", ...newsTools]),
       strictSubject: "macro",
       preferredMacroIndicator: singleIndicator,
       preferredMacroCountry: detectedCountry,
@@ -305,9 +324,13 @@ function buildMacroPolicy(request: AgentRequest, query: string): AgentPolicy {
     };
   }
 
+  const macroNewsTools: AgentToolName[] = wantsNewsContext
+    ? ["get_news", "get_context_news"]
+    : [];
+
   return {
     mode: "analysis",
-    requiredTools: ["get_macro_snapshot"],
+    requiredTools: uniqueTools(["get_macro_snapshot", ...macroNewsTools]),
     allowedTools: MACRO_TOOLS,
     strictSubject: "macro",
     preferredMacroCountry: detectedCountry,
@@ -334,7 +357,13 @@ function buildCommodityPolicy(request: AgentRequest, query: string): AgentPolicy
   const requiredTools: AgentToolName[] = [];
   let allowedTools: AgentToolName[] = ["get_commodity_overview"];
 
-  if (isCommodityHistoryQuestion(query)) {
+  if (isNewsQuestion(query) || isDriverQuestion(query)) {
+    requiredTools.push("get_news");
+    allowedTools = ["get_news", "get_context_news", "get_commodity_overview"];
+    if (isDriverQuestion(query)) {
+      requiredTools.push("get_context_news");
+    }
+  } else if (isCommodityHistoryQuestion(query)) {
     requiredTools.push("get_commodity_price_history");
     allowedTools = ["get_commodity_price_history", "get_commodity_overview"];
   } else {
@@ -371,7 +400,13 @@ function buildCryptoPolicy(request: AgentRequest, query: string): AgentPolicy {
   const requiredTools: AgentToolName[] = [];
   let allowedTools: AgentToolName[] = ["get_crypto_overview"];
 
-  if (isCryptoHistoryQuestion(query)) {
+  if (isNewsQuestion(query) || isDriverQuestion(query)) {
+    requiredTools.push("get_news");
+    allowedTools = ["get_news", "get_context_news", "get_crypto_overview"];
+    if (isDriverQuestion(query)) {
+      requiredTools.push("get_context_news");
+    }
+  } else if (isCryptoHistoryQuestion(query)) {
     requiredTools.push("get_crypto_price_history");
     allowedTools = ["get_crypto_price_history", "get_crypto_overview"];
   } else {

@@ -58,7 +58,35 @@ test("multi-driver stock questions require overview, fundamentals, and news", ()
     "get_stock_overview",
     "get_stock_fundamentals",
     "get_news",
+    "get_context_news",
   ]);
+});
+
+test("macro driver questions require macro data plus focused and context news", () => {
+  const policy = createAgentPolicy({
+    query: "What is driving the inflation trend in the U.S.?",
+    dashboard_context: "macro",
+    country: "us",
+  });
+
+  assert.equal(policy.mode, "analysis");
+  assert.deepEqual(policy.requiredTools, [
+    "get_macro_series",
+    "get_news",
+    "get_context_news",
+  ]);
+});
+
+test("crypto news recap no longer declines and uses focused news", () => {
+  const policy = createAgentPolicy({
+    query: "Any recent headlines around Bitcoin?",
+    dashboard_context: "crypto",
+    crypto_instrument: "BTC-PERPETUAL",
+  });
+
+  assert.equal(policy.mode, "analysis");
+  assert.deepEqual(policy.requiredTools, ["get_news"]);
+  assert.ok(policy.allowedTools.includes("get_context_news"));
 });
 
 test("general casual queries do not force a stock overview tool", () => {

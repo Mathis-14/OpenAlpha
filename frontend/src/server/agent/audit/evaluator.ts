@@ -696,7 +696,8 @@ function evaluateTemporalSafety(
     newsExcerpt &&
     NEWS_RECENCY_WORDS.test(newsExcerpt) &&
     !NEGATED_CAPABILITY_WORDS.test(newsExcerpt) &&
-    !toolNames.has("get_news")
+    !toolNames.has("get_news") &&
+    !toolNames.has("get_context_news")
   ) {
     findings.push(
       createFinding({
