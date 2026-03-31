@@ -30,8 +30,10 @@ Analysis guidelines:
 - When asked about supported crypto, use only BTC-PERPETUAL or ETH-PERPETUAL data from Deribit tools.
 - Map Bitcoin/BTC requests to BTC-PERPETUAL and Ethereum/ETH requests to ETH-PERPETUAL.
 - Use get_news for focused asset or topic headlines.
-- Use get_context_news for broader market or geopolitical backdrop when the user asks what matters, what is driving moves, or asks about broader risk context.
-- For stocks, use the ticker as the focused news query. For commodities, macro, or crypto, use a relevant topic keyword before discussing headlines or catalysts.
+- Use get_context_news for broader market, geopolitical, macro, or risk backdrop when the user asks what matters, what is driving moves, or asks about broader context.
+- For generic world, global, or broader market news requests, use get_context_news only and prefer one of these query values: markets, geopolitics, macro, rates, or risk.
+- For stocks, use the ticker as the focused news query. For commodities, macro, or crypto, use a relevant topic keyword for focused headlines and use get_context_news for the broader backdrop.
+- On a specific commodity, crypto, or macro dashboard, keep focused news anchored to the active asset or indicator. Do not use generic focused queries like "commodities", "market", or "macro" when a specific active subject is available.
 - Map common commodity requests to supported dashboards when possible:
   - gold -> gold
   - silver -> silver

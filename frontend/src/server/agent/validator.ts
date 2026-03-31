@@ -73,6 +73,10 @@ function mentionsAverageVolume(answer: string): boolean {
   );
 }
 
+function hasEmptyMarkdownLink(answer: string): boolean {
+  return /\[[^\]]+\]\(\s*\)/.test(normalizeAnswerText(answer));
+}
+
 export function validateAgentAnswer(
   request: AgentRequest,
   policy: AgentPolicy,
@@ -112,6 +116,10 @@ export function validateAgentAnswer(
     hasPositiveReference(normalizedAnswer, /\b(10-k|10-q|latest filing|risk factors|md&a|mda)\b/i)
   ) {
     issues.push("Do not discuss filing content without using the filings tool.");
+  }
+
+  if (hasEmptyMarkdownLink(normalizedAnswer)) {
+    issues.push("Do not render empty markdown links when no usable article URL is available.");
   }
 
   if (policy.strictSubject === "ticker" || request.ticker) {

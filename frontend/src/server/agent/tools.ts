@@ -14,6 +14,7 @@ import type {
   MacroIndicatorSlug,
   PeriodType,
   PricePoint,
+  NewsResponse,
   TickerOverview,
 } from "@/types/api";
 import { formatDateInputValue, getDefaultDateRange } from "@/lib/data-export";
@@ -528,7 +529,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: "get_news",
       description:
-        "Get latest focused news from Yahoo Finance. Use a ticker for company news or a topic keyword for focused context like gold, bitcoin, inflation, or natural gas.",
+        "Get latest focused news from Yahoo Finance. Use a ticker for company news or a topic keyword for focused context like gold, bitcoin, inflation, or natural gas. Do not use this for generic world-market or global-backdrop questions.",
       parameters: {
         type: "object",
         properties: {
@@ -550,13 +551,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: "get_context_news",
       description:
-        "Get broader market or geopolitical context news from Yahoo Finance. Use topic keywords like markets or geopolitics.",
+        "Get broader market, geopolitical, macro, or risk context news. This is the broad context tool; use it for what matters, what is driving moves, or broader backdrop questions rather than company-specific headlines.",
       parameters: {
         type: "object",
         properties: {
           query: {
             type: "string",
-            description: "Broad market or geopolitical topic keyword",
+            description: "Broad backdrop intent. Prefer one of: markets, geopolitics, macro, rates, or risk.",
           },
           limit: {
             type: "integer",
@@ -885,6 +886,83 @@ function normalizePeriod(period: unknown): PeriodType {
     : "1mo";
 }
 
+function buildNewsDigest(news: NewsResponse) {
+  const topArticles = news.articles.slice(0, 3);
+  const combined = topArticles
+    .map((article) => `${article.title} ${article.summary}`.toLowerCase())
+    .join(" ");
+
+  const themes = [
+    {
+      label: "geopolitics",
+      pattern: /\b(iran|war|conflict|tariff|tariffs|sanction|sanctions|middle east|election|trade war)\b/i,
+    },
+    {
+      label: "rates",
+      pattern: /\b(rate|rates|yield|yields|treasury|fed|central bank|monetary)\b/i,
+    },
+    {
+      label: "inflation",
+      pattern: /\b(inflation|cpi|prices)\b/i,
+    },
+    {
+      label: "risk sentiment",
+      pattern: /\b(volatility|fear|selloff|risk-off|sentiment|safe haven|stress)\b/i,
+    },
+    {
+      label: "energy",
+      pattern: /\b(oil|gas|crude|energy)\b/i,
+    },
+    {
+      label: "equities",
+      pattern: /\b(stocks|equities|wall street|s&p 500|nasdaq)\b/i,
+    },
+  ]
+    .filter((theme) => theme.pattern.test(combined))
+    .map((theme) => theme.label)
+    .slice(0, 3);
+
+  return {
+    provider: news.provider ?? null,
+    source_mode: news.source_mode ?? null,
+    article_count: news.articles.length,
+    usable_link_count: news.articles.filter((article) => Boolean(article.url)).length,
+    warning_count: news.warnings?.length ?? 0,
+    fallback_summary: news.warnings?.[0] ?? null,
+    top_headlines: topArticles.map((article) => ({
+      title: article.title,
+      source: article.source,
+      published: article.published,
+      link_available: Boolean(article.url),
+    })),
+    dominant_themes: themes,
+    guidance:
+      news.kind === "focused" && news.source_mode === "broad_feed"
+        ? "Use these headlines as tentative focused context recovered from a broader market feed. Keep the answer conservative and grounded."
+        : news.kind === "focused"
+        ? "Use these focused headlines as the primary news input for the active asset or topic."
+        : "Use this as broader backdrop only; do not let it replace asset-specific headlines.",
+  };
+}
+
+function shapeNewsForAgent(news: NewsResponse) {
+  return {
+    ...news,
+    articles: news.articles.map((article) => {
+      const shaped: Record<string, unknown> = {
+        title: article.title,
+        source: article.source,
+        published: article.published,
+        summary: article.summary,
+      };
+      if (article.url) {
+        shaped.url = article.url;
+      }
+      return shaped;
+    }),
+  };
+}
+
 export async function dispatchToolWithDisplay(
   name: string,
   argumentsObject: Record<string, unknown>,
@@ -1093,12 +1171,20 @@ export async function dispatchToolWithDisplay(
     const query = String(argumentsObject.query ?? "").trim();
     const rawLimit = Number(argumentsObject.limit ?? 5);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 5;
-    result = await getNews(query, limit);
+    const news = await getNews(query, limit);
+    result = {
+      ...shapeNewsForAgent(news),
+      digest: buildNewsDigest(news),
+    };
   } else if (name === "get_context_news") {
     const query = String(argumentsObject.query ?? "").trim();
     const rawLimit = Number(argumentsObject.limit ?? 5);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 5;
-    result = await getContextNews(query, limit);
+    const news = await getContextNews(query, limit);
+    result = {
+      ...shapeNewsForAgent(news),
+      digest: buildNewsDigest(news),
+    };
   } else {
     result = { error: `Unknown tool: ${name}` };
   }

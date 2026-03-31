@@ -178,6 +178,12 @@ function formatCompactCount(value: number): string {
   }).format(value);
 }
 
+function looksGeneralBackdropPrompt(query: string): boolean {
+  return /\b(global|world|broader|backdrop|market context|broader context|world market|global news|world news|global risks?|geopolitic|geopolitical|get_context_news)\b/i.test(
+    query,
+  );
+}
+
 function formatCompactMoney(value: number): string {
   return Intl.NumberFormat("en-US", {
     style: "currency",
@@ -430,7 +436,7 @@ function buildUserContent(
       `${query}\n\n` +
       `[Context: the user is on the commodity dashboard for ${commodityInstrument}. ` +
       `Use get_commodity_overview and get_commodity_price_history for ${commodityInstrument}. ` +
-      `For focused headlines, use get_news with query='${focusedNewsQuery}'. ` +
+      `For focused headlines, use get_news with query='${focusedNewsQuery}'. Do not use a generic focused query like 'commodities' when the active dashboard commodity is specific. ` +
       `For broader market or geopolitical backdrop, use get_context_news with query='${contextNewsQuery}'. ` +
       "Keep the answer grounded in this commodity dashboard and its live futures market data.]"
     );
@@ -443,7 +449,7 @@ function buildUserContent(
       `${query}\n\n` +
       `[Context: the user is on the crypto dashboard for ${cryptoInstrument}. ` +
       `Use get_crypto_overview and get_crypto_price_history for ${cryptoInstrument}. ` +
-      `For focused headlines, use get_news with query='${focusedNewsQuery}'. ` +
+      `For focused headlines, use get_news with query='${focusedNewsQuery}'. Do not use generic focused queries like 'crypto' or 'market' when the active instrument is specific. ` +
       `For broader market or geopolitical backdrop, use get_context_news with query='${contextNewsQuery}'. ` +
       "Keep the answer grounded in Deribit market data only.]"
     );
@@ -461,7 +467,7 @@ function buildUserContent(
       `[Context: the user is on the macro dashboard for ${countryLabel}. ` +
       `Use get_macro_snapshot with country='${normalizedCountry}' for broad context, ` +
       `and use get_macro_series with country='${normalizedCountry}' when the user asks about one indicator trend or history. ` +
-      `For focused headlines, use get_news with query='${focusedNewsQuery}' or the relevant indicator topic such as inflation, interest rates, bond yields, or unemployment. ` +
+      `For focused headlines, use get_news with query='${focusedNewsQuery}' or the relevant indicator topic such as inflation, interest rates, bond yields, or unemployment. Do not use a generic focused query like 'macro' or 'market' when a country or indicator-specific topic is available. ` +
       `For broader market or geopolitical backdrop, use get_context_news with query='${contextNewsQuery}'. ` +
       "Keep the answer " +
       "grounded in that country unless the user asks to compare or switch countries.]"
@@ -475,6 +481,15 @@ function buildUserContent(
       "Use suggest_data_export when you have a concrete recommendation. " +
       "Prefer a single asset export, a clear date window, and a short note about why that export fits. " +
       "Do not promise filings, news, fundamentals, or bulk multi-asset exports from this tool.]"
+    );
+  }
+
+  if (looksGeneralBackdropPrompt(query)) {
+    const contextNewsQuery = getContextNewsQueryFromPrompt(query);
+    return (
+      `${query}\n\n` +
+      `[Context: this is a broad market, geopolitical, macro, or risk-backdrop request. ` +
+      `Use get_context_news with query='${contextNewsQuery}'. Do not pivot to focused news or asset-specific tools unless the user explicitly names a supported asset, ticker, or indicator.]`
     );
   }
 

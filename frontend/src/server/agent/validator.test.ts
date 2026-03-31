@@ -202,3 +202,35 @@ test("validator rejects broader market backdrop claims without context news", ()
   assert.equal(result.valid, false);
   assert.match(result.issues.join(" "), /context news/i);
 });
+
+test("validator rejects empty markdown links in final answers", () => {
+  const result = validateAgentAnswer(
+    {
+      query: "Summarize world market headlines",
+    },
+    {
+      mode: "analysis",
+      requiredTools: ["get_context_news"],
+      allowedTools: ["get_context_news"],
+      strictSubject: "general",
+      answerGuidance: [],
+    },
+    "- **Wall Street soars** [(Reuters)]()\n- **Risk sentiment improves** [(CNBC)](https://example.com/cnbc)",
+    [
+      {
+        name: "get_context_news",
+        args: { query: "markets" },
+        success: true,
+        rawContent: "{}",
+        parsedContent: {
+          kind: "context",
+          articles: [],
+        },
+        displays: [],
+      },
+    ],
+  );
+
+  assert.equal(result.valid, false);
+  assert.match(result.issues.join(" "), /empty markdown links/i);
+});
