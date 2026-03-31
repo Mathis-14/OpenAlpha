@@ -10,9 +10,11 @@ import type {
   MacroCountry,
   MacroHistoryRange,
   MacroIndicator,
+  MacroSnapshot,
   MacroIndicatorSlug,
   PeriodType,
   PricePoint,
+  TickerOverview,
 } from "@/types/api";
 import { formatDateInputValue, getDefaultDateRange } from "@/lib/data-export";
 import {
@@ -72,7 +74,6 @@ export type SuggestedDataExport = DataExportQuery & {
   reason?: string;
 };
 
-const MAX_HISTORY_POINTS = 30;
 const MAX_FILING_SECTION_CHARS = 2_000;
 const DATA_EXPORT_PRESETS = new Set(["1mo", "3mo", "1y", "5y"]);
 
@@ -580,14 +581,197 @@ function formatIndicatorValue(
   return `${indicator.latest_value.toFixed(decimals)}${suffix}`;
 }
 
-function truncateHistory(points: PricePoint[]): { price_history: PricePoint[]; _note?: string } {
-  if (points.length <= MAX_HISTORY_POINTS) {
-    return { price_history: points };
+function toIsoDateFromUnix(timestamp: number): string {
+  return new Date(timestamp * 1000).toISOString().slice(0, 10);
+}
+
+function summarizePriceHistory(points: PricePoint[]) {
+  if (points.length === 0) {
+    return {
+      points: 0,
+      note: "No history points returned.",
+    };
   }
 
+  const start = points[0];
+  const end = points[points.length - 1];
+  const highs = points.map((point) => point.high);
+  const lows = points.map((point) => point.low);
+  const absoluteChange = Number((end.close - start.close).toFixed(4));
+  const percentChange =
+    start.close === 0
+      ? null
+      : Number((((end.close - start.close) / start.close) * 100).toFixed(4));
+
   return {
-    price_history: points.slice(-MAX_HISTORY_POINTS),
-    _note: `Showing last ${MAX_HISTORY_POINTS} of ${points.length} points`,
+    points: points.length,
+    start_date: toIsoDateFromUnix(start.date),
+    end_date: toIsoDateFromUnix(end.date),
+    start_close: start.close,
+    end_close: end.close,
+    latest_close: end.close,
+    high: Math.max(...highs),
+    low: Math.min(...lows),
+    absolute_change: absoluteChange,
+    percent_change: percentChange,
+  };
+}
+
+function shapeStockOverviewForAgent(
+  overview: TickerOverview,
+) {
+  return {
+    symbol: overview.symbol,
+    name: overview.name,
+    currency: overview.currency,
+    exchange: overview.exchange,
+    current_price: overview.current_price,
+    previous_close: overview.previous_close,
+    change: overview.change,
+    change_percent: overview.change_percent,
+    volume: overview.volume,
+    market_cap: overview.market_cap,
+    fifty_two_week_high: overview.fifty_two_week_high,
+    fifty_two_week_low: overview.fifty_two_week_low,
+    data_status: overview.data_status ?? "complete",
+    warnings: overview.warnings ?? [],
+  };
+}
+
+function shapeCommodityOverviewForAgent(
+  overview: CommodityOverview,
+) {
+  return {
+    instrument: overview.instrument,
+    name: overview.name,
+    exchange_label: overview.exchange_label,
+    source_label: overview.source_label,
+    unit_label: overview.unit_label,
+    current_price: overview.current_price,
+    previous_close: overview.previous_close,
+    change: overview.change,
+    change_percent: overview.change_percent,
+    volume: overview.volume,
+    open_interest: overview.open_interest,
+    day_high: overview.day_high,
+    day_low: overview.day_low,
+    fifty_two_week_high: overview.fifty_two_week_high,
+    fifty_two_week_low: overview.fifty_two_week_low,
+    market_state: overview.market_state,
+    data_status: overview.data_status ?? "complete",
+    warnings: overview.warnings ?? [],
+  };
+}
+
+function shapeCryptoOverviewForAgent(
+  overview: CryptoOverview,
+) {
+  const funding8hPercent =
+    overview.funding_8h == null
+      ? null
+      : Number((overview.funding_8h * 100).toFixed(6));
+  const currentFundingPercent =
+    overview.current_funding == null
+      ? null
+      : Number((overview.current_funding * 100).toFixed(6));
+
+  return {
+    instrument: overview.instrument,
+    name: overview.name,
+    description: overview.description,
+    last_price: overview.last_price,
+    mark_price: overview.mark_price,
+    index_price: overview.index_price,
+    high_24h: overview.high_24h,
+    low_24h: overview.low_24h,
+    change_24h: overview.change_24h,
+    volume_24h: overview.volume_24h,
+    volume_24h_display:
+      overview.volume_24h == null
+        ? "—"
+        : `${compactNumber(overview.volume_24h)} ${overview.base_currency}`,
+    volume_notional_24h: overview.volume_notional_24h,
+    volume_notional_24h_display: compactCurrency(overview.volume_notional_24h),
+    open_interest: overview.open_interest,
+    open_interest_display: compactNumber(overview.open_interest),
+    open_interest_unit: "native Deribit units",
+    funding_8h_percent: funding8hPercent,
+    current_funding_percent: currentFundingPercent,
+    data_status: overview.data_status ?? "complete",
+    warnings: overview.warnings ?? [],
+  };
+}
+
+function shapeMacroSnapshotForAgent(
+  snapshot: MacroSnapshot,
+  country: MacroCountry,
+) {
+  return {
+    country,
+    fed_funds_rate: {
+      name: snapshot.fed_funds_rate.name,
+      latest_value: snapshot.fed_funds_rate.latest_value,
+      latest_date: snapshot.fed_funds_rate.latest_date,
+      unit: snapshot.fed_funds_rate.unit,
+    },
+    cpi: {
+      name: snapshot.cpi.name,
+      latest_value: snapshot.cpi.latest_value,
+      latest_date: snapshot.cpi.latest_date,
+      unit: snapshot.cpi.unit,
+    },
+    gdp_growth: {
+      name: snapshot.gdp_growth.name,
+      latest_value: snapshot.gdp_growth.latest_value,
+      latest_date: snapshot.gdp_growth.latest_date,
+      unit: snapshot.gdp_growth.unit,
+    },
+    treasury_10y: {
+      name: snapshot.treasury_10y.name,
+      latest_value: snapshot.treasury_10y.latest_value,
+      latest_date: snapshot.treasury_10y.latest_date,
+      unit: snapshot.treasury_10y.unit,
+    },
+    unemployment: {
+      name: snapshot.unemployment.name,
+      latest_value: snapshot.unemployment.latest_value,
+      latest_date: snapshot.unemployment.latest_date,
+      unit: snapshot.unemployment.unit,
+    },
+  };
+}
+
+function shapeMacroSeriesForAgent(
+  series: MacroIndicator,
+  indicator: MacroIndicatorSlug,
+  country: MacroCountry,
+  range: MacroHistoryRange,
+) {
+  const start = series.history[0];
+  const end = series.history[series.history.length - 1];
+  const absoluteChange = Number((end.value - start.value).toFixed(6));
+  const percentChange =
+    start.value === 0
+      ? null
+      : Number((((end.value - start.value) / start.value) * 100).toFixed(6));
+  const values = series.history.map((point) => point.value);
+
+  return {
+    country,
+    indicator,
+    name: series.name,
+    range,
+    latest_value: series.latest_value,
+    latest_date: series.latest_date,
+    unit: series.unit,
+    start_date: start.date,
+    end_date: end.date,
+    start_value: start.value,
+    end_value: end.value,
+    absolute_change: absoluteChange,
+    percent_change: percentChange,
+    high: Math.max(...values),
+    low: Math.min(...values),
   };
 }
 
@@ -689,7 +873,7 @@ export async function dispatchToolWithDisplay(
   if (name === "get_stock_overview") {
     const symbol = String(argumentsObject.symbol ?? "").trim();
     const overview = await getTickerOverview(symbol);
-    result = overview;
+    result = shapeStockOverviewForAgent(overview);
     displays = [
       {
         type: "display_metric",
@@ -733,7 +917,11 @@ export async function dispatchToolWithDisplay(
     const symbol = String(argumentsObject.symbol ?? "").trim();
     const period = normalizePeriod(argumentsObject.period);
     const history = await getPriceHistory(symbol, period);
-    result = truncateHistory(history);
+    result = {
+      symbol,
+      period,
+      ...summarizePriceHistory(history),
+    };
     displays = [
       {
         type: "display_chart",
@@ -750,7 +938,7 @@ export async function dispatchToolWithDisplay(
   } else if (name === "get_macro_snapshot") {
     const country = normalizeCountry(argumentsObject.country);
     const snapshot = await getMacroSnapshotForCountry(country);
-    result = snapshot;
+    result = shapeMacroSnapshotForAgent(snapshot, country);
     displays = [
       {
         type: "display_metric",
@@ -778,7 +966,7 @@ export async function dispatchToolWithDisplay(
     const country = normalizeCountry(argumentsObject.country);
     const range = normalizeMacroRange(argumentsObject.range);
     const series = await getMacroIndicator(indicator, range, country);
-    result = series;
+    result = shapeMacroSeriesForAgent(series, indicator, country, range);
     displays = [
       {
         type: "display_chart",
@@ -808,7 +996,7 @@ export async function dispatchToolWithDisplay(
   } else if (name === "get_commodity_overview") {
     const instrument = normalizeCommodityInstrument(argumentsObject.instrument);
     const overview = await getCommodityOverview(instrument);
-    result = overview;
+    result = shapeCommodityOverviewForAgent(overview);
     displays = [
       {
         type: "display_metric",
@@ -821,7 +1009,11 @@ export async function dispatchToolWithDisplay(
     const instrument = normalizeCommodityInstrument(argumentsObject.instrument);
     const range = normalizeCommodityRange(argumentsObject.range);
     const history = await getCommodityPriceHistory(instrument, range);
-    result = truncateHistory(history);
+    result = {
+      instrument,
+      range,
+      ...summarizePriceHistory(history),
+    };
     displays = [
       {
         type: "display_chart",
@@ -838,7 +1030,7 @@ export async function dispatchToolWithDisplay(
   } else if (name === "get_crypto_overview") {
     const instrument = normalizeCryptoInstrument(argumentsObject.instrument);
     const overview = await getCryptoOverview(instrument);
-    result = overview;
+    result = shapeCryptoOverviewForAgent(overview);
     displays = [
       {
         type: "display_metric",
@@ -851,7 +1043,11 @@ export async function dispatchToolWithDisplay(
     const instrument = normalizeCryptoInstrument(argumentsObject.instrument);
     const range = normalizeCryptoRange(argumentsObject.range);
     const history = await getCryptoPriceHistory(instrument, range);
-    result = truncateHistory(history);
+    result = {
+      instrument,
+      range,
+      ...summarizePriceHistory(history),
+    };
     displays = [
       {
         type: "display_chart",

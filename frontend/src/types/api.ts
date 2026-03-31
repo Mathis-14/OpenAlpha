@@ -277,6 +277,7 @@ export type AgentEventType =
   | "text_delta"
   | "display_chart"
   | "display_metric"
+  | "display_about"
   | "display_download"
   | "display_table"
   | "text"
