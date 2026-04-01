@@ -1,4 +1,7 @@
-import type { QuantAgentRequest as FrontendQuantAgentRequest } from "@/types/api";
+import type {
+  QuantAgentRequest as FrontendQuantAgentRequest,
+  QuantGreeksMetric,
+} from "@/types/api";
 import { QUANT_SYSTEM_PROMPT } from "@/server/quant-agent/prompt";
 import {
   QUANT_TOOL_DEFINITIONS,
@@ -13,6 +16,30 @@ const STREAM_CHUNK_SIZE = 48;
 const STREAM_CHUNK_DELAY_MS = 18;
 const TOOL_REQUIRED_MESSAGE =
   "You must call at least one tool before answering. Do not answer from memory.";
+const FEATURED_TICKERS = [
+  "SPY",
+  "QQQ",
+  "AAPL",
+  "TSLA",
+  "MSFT",
+  "AMZN",
+  "NVDA",
+  "META",
+  "GOOGL",
+];
+const SYMBOL_STOPWORDS = new Set([
+  "IV",
+  "DTE",
+  "ATM",
+  "ITM",
+  "OTM",
+  "USD",
+  "CALL",
+  "PUT",
+  "VOL",
+  "SSVI",
+  "TTE",
+]);
 
 export type QuantAgentRequest = FrontendQuantAgentRequest;
 
@@ -188,11 +215,117 @@ function parseToolArguments(raw: string): Record<string, unknown> {
   }
 }
 
+type QuantIntentHints = {
+  symbol?: string;
+  optionType?: "call" | "put";
+  focusMetric?: QuantGreeksMetric;
+  daysToExpiry?: number;
+  volatility?: number;
+  strike?: number;
+};
+
+export function extractQuantIntentHints(query: string): QuantIntentHints {
+  const source = query.trim();
+  const upper = source.toUpperCase();
+
+  const featuredSymbol = FEATURED_TICKERS.find((ticker) =>
+    new RegExp(`\\b${ticker}\\b`, "i").test(source),
+  );
+  const uppercaseSymbol =
+    upper.match(/\b[A-Z]{1,5}\b/g)?.find((candidate) => !SYMBOL_STOPWORDS.has(candidate)) ??
+    undefined;
+
+  const metricMap: Array<[RegExp, QuantGreeksMetric]> = [
+    [/\bvolga\b/i, "volga"],
+    [/\bvanna\b/i, "vanna"],
+    [/\bspeed\b/i, "speed"],
+    [/\bgamma\b/i, "gamma"],
+    [/\bvega\b/i, "vega"],
+    [/\btheta\b/i, "theta"],
+    [/\brho\b/i, "rho"],
+    [/\bdelta\b/i, "delta"],
+    [/\bpayoff\b/i, "payoff"],
+    [/\bprice\b/i, "price"],
+  ];
+
+  const focusMetric = metricMap.find(([pattern]) => pattern.test(source))?.[1];
+  const optionType = /\bput\b/i.test(source)
+    ? "put"
+    : /\bcall\b/i.test(source)
+      ? "call"
+      : undefined;
+  const daysToExpiryMatch = source.match(/(\d+(?:\.\d+)?)\s*(?:day|days|dte)\b/i);
+  const volatilityMatch = source.match(/(\d+(?:\.\d+)?)\s*%?\s*(?:iv|vol|volatility)\b/i);
+  const strikeMatch =
+    source.match(/\bstrike\s+(\d+(?:\.\d+)?)\b/i) ??
+    source.match(/\b(\d+(?:\.\d+)?)\s*(?:call|put)\b/i);
+
+  return {
+    symbol: featuredSymbol ?? uppercaseSymbol,
+    optionType,
+    focusMetric,
+    daysToExpiry: daysToExpiryMatch ? Number(daysToExpiryMatch[1]) : undefined,
+    volatility: volatilityMatch ? Number(volatilityMatch[1]) / 100 : undefined,
+    strike: strikeMatch ? Number(strikeMatch[1]) : undefined,
+  };
+}
+
+export function applyQuantHintsToToolArguments(
+  name: string,
+  args: Record<string, unknown>,
+  hints: QuantIntentHints,
+): Record<string, unknown> {
+  const nextArgs = { ...args };
+
+  if (
+    (name === "fetch_option_chain" || name === "build_vol_surface" || name === "build_payoff_diagram") &&
+    !nextArgs.symbol &&
+    hints.symbol
+  ) {
+    nextArgs.symbol = hints.symbol;
+  }
+
+  if (name === "compute_greeks") {
+    if (!nextArgs.symbol && hints.symbol) {
+      nextArgs.symbol = hints.symbol;
+    }
+    if (!nextArgs.option_type && hints.optionType) {
+      nextArgs.option_type = hints.optionType;
+    }
+    if (nextArgs.focus_metric == null && hints.focusMetric) {
+      nextArgs.focus_metric = hints.focusMetric;
+    }
+    if (nextArgs.days_to_expiry == null && nextArgs.time_to_expiry_years == null && nextArgs.expiration == null && hints.daysToExpiry != null) {
+      nextArgs.days_to_expiry = hints.daysToExpiry;
+    }
+    if (nextArgs.volatility == null && hints.volatility != null) {
+      nextArgs.volatility = hints.volatility;
+    }
+    if (nextArgs.strike == null && hints.strike != null) {
+      nextArgs.strike = hints.strike;
+    }
+  }
+
+  return nextArgs;
+}
+
 function buildUserContent(query: string): string {
+  const hints = extractQuantIntentHints(query);
+  const contextHints = [
+    hints.symbol ? `detected_ticker=${hints.symbol}` : null,
+    hints.optionType ? `detected_option_type=${hints.optionType}` : null,
+    hints.focusMetric ? `detected_metric=${hints.focusMetric}` : null,
+    hints.daysToExpiry != null ? `detected_days_to_expiry=${hints.daysToExpiry}` : null,
+    hints.volatility != null ? `detected_volatility=${(hints.volatility * 100).toFixed(1)}%` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
   return [
     query,
     "",
     "[Context: this is Quant Alpha. Scope is U.S. equity options only. Use tools for option chains, Greeks, volatility surfaces, and payoff diagrams. When the user asks for strategy analytics, translate the natural-language strategy into structured option legs before calling build_payoff_diagram.]",
+    contextHints ? `[Detected hints: ${contextHints}]` : "",
   ].join("\n");
 }
 
@@ -209,6 +342,7 @@ export async function* runQuantAgent(
     { role: "system", content: QUANT_SYSTEM_PROMPT },
     { role: "user", content: buildUserContent(request.query) },
   ];
+  const queryHints = extractQuantIntentHints(request.query);
 
   let anyToolCalled = false;
   let toolCorrectionUsed = false;
@@ -244,7 +378,11 @@ export async function* runQuantAgent(
 
       for (const toolCall of toolCalls) {
         const name = toolCall.function.name;
-        const args = parseToolArguments(toolCall.function.arguments);
+        const args = applyQuantHintsToToolArguments(
+          name,
+          parseToolArguments(toolCall.function.arguments),
+          queryHints,
+        );
 
         yield sse("tool_call", { name, arguments: args });
 

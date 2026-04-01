@@ -112,6 +112,10 @@ type NormalizedGreeksInputs = {
   volatility: number;
   riskFreeRate: number;
   timeToExpiryYears: number;
+  maturityRangeDays?: {
+    min: number;
+    max: number;
+  };
   assumptions: string[];
 };
 
@@ -605,6 +609,7 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
   if (input.time_to_expiry_years == null && expiration) {
     assumptions.push(`Used expiration ${expiration} to derive time to expiry (${timeToExpiryYears.toFixed(4)} years).`);
   }
+  assumptions.push("Greeks convention: vega and rho are quoted per 1 vol/rate point, and theta is quoted per day.");
 
   return {
     symbol: normalizedSymbol,
@@ -615,6 +620,13 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
     volatility,
     riskFreeRate,
     timeToExpiryYears,
+    maturityRangeDays:
+      chain && chain.expirations.length > 0
+        ? {
+            min: chain.expirations[0]!.days_to_expiry,
+            max: chain.expirations[chain.expirations.length - 1]!.days_to_expiry,
+          }
+        : undefined,
     assumptions,
   };
 }
@@ -650,6 +662,7 @@ export async function computeGreeks(
     volga: Number(result.volga.toFixed(6)),
     vanna: Number(result.vanna.toFixed(6)),
     speed: Number(result.speed.toFixed(6)),
+    maturity_range_days: normalized.maturityRangeDays,
     assumptions: normalized.assumptions,
   };
 }

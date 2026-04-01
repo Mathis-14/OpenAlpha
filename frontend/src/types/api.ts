@@ -342,6 +342,10 @@ export interface QuantGreeksResult {
   volga: number;
   vanna: number;
   speed: number;
+  maturity_range_days?: {
+    min: number;
+    max: number;
+  };
   assumptions: string[];
 }
 

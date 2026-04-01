@@ -125,6 +125,14 @@ function formatTenorFromDays(days: number): string {
   return `${years}Y ${remainingMonths}M`;
 }
 
+function getMaturitySliderLabels(minDays: number, maxDays: number): string[] {
+  const anchors = [minDays, 30, 180, 365, maxDays]
+    .filter((days, index, values) => days >= minDays && days <= maxDays && values.indexOf(days) === index)
+    .sort((left, right) => left - right);
+
+  return anchors.map((days) => formatTenorFromDays(days));
+}
+
 function formatDateLabel(value: string | null | undefined): string {
   if (!value) {
     return "N/A";
@@ -622,16 +630,31 @@ function QuantGreeksBlock({
     1,
     Math.round(result.time_to_expiry_years * 365.25),
   );
-  const maxDaysToExpiry = Math.max(365, Math.ceil(baseDaysToExpiry * 2));
-  const [daysToExpiry, setDaysToExpiry] = useState(2);
+  const minDaysToExpiry = 1;
+  const maxDaysToExpiry = Math.max(
+    minDaysToExpiry,
+    result.maturity_range_days?.max ?? Math.max(365, Math.ceil(baseDaysToExpiry * 2)),
+  );
+  const defaultDaysToExpiry = Math.min(
+    maxDaysToExpiry,
+    Math.max(minDaysToExpiry, 2),
+  );
+  const [daysToExpiry, setDaysToExpiry] = useState(defaultDaysToExpiry);
+  const maturityLabels = getMaturitySliderLabels(minDaysToExpiry, maxDaysToExpiry);
 
   useEffect(() => {
     setSelectedMetric(preferredMetric ?? "delta");
   }, [preferredMetric, result.symbol, result.strike, result.expiration]);
 
   useEffect(() => {
-    setDaysToExpiry(2);
-  }, [baseDaysToExpiry, result.symbol, result.strike, result.expiration]);
+    setDaysToExpiry(defaultDaysToExpiry);
+  }, [
+    baseDaysToExpiry,
+    defaultDaysToExpiry,
+    result.symbol,
+    result.strike,
+    result.expiration,
+  ]);
 
   return (
     <section className="rounded-[18px] border border-[#E8701A]/12 bg-white p-5 shadow-[0_18px_34px_-30px_rgba(232,112,26,0.35)]">
@@ -654,16 +677,16 @@ function QuantGreeksBlock({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <InfoStat label="Delta" value={formatNumber(result.delta, 4)} />
         <InfoStat label="Gamma" value={formatNumber(result.gamma, 6)} />
-        <InfoStat label="Vega" value={formatNumber(result.vega, 4)} />
+        <InfoStat label="Vega / 1 vol pt" value={formatNumber(result.vega, 4)} />
         <InfoStat label="Theta / day" value={formatNumber(result.theta, 4)} />
-        <InfoStat label="Rho" value={formatNumber(result.rho, 4)} />
+        <InfoStat label="Rho / 1 rate pt" value={formatNumber(result.rho, 4)} />
         <InfoStat label="Volga" value={formatNumber(result.volga, 4)} />
         <InfoStat label="Vanna" value={formatNumber(result.vanna, 4)} />
         <InfoStat label="Speed" value={formatNumber(result.speed, 6)} />
         <InfoStat label="Volatility" value={formatPercent(result.volatility)} />
         <InfoStat label="Spot" value={formatNumber(result.spot_price)} />
         <InfoStat label="Risk-free" value={formatPercent(result.risk_free_rate, 2)} />
-        <InfoStat label="TTE" value={`${formatNumber(result.time_to_expiry_years, 4)}y`} />
+        <InfoStat label="TTE" value={formatTenorFromDays(baseDaysToExpiry)} />
       </div>
 
       <div className="mt-4 rounded-[14px] border border-[#E8701A]/10 bg-[#fff8f2] p-4">
@@ -701,24 +724,21 @@ function QuantGreeksBlock({
             </p>
             <p className="text-sm text-black/64">
               {formatTenorFromDays(daysToExpiry)}
-              <span className="ml-2 text-black/42">
-                ({formatNumber(daysToExpiry / 365.25, 2)}y)
-              </span>
             </p>
           </div>
           <input
             type="range"
-            min={2}
+            min={minDaysToExpiry}
             max={maxDaysToExpiry}
             step={1}
             value={daysToExpiry}
             onChange={(event) => setDaysToExpiry(Number(event.target.value))}
             className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[#f7e7d9] accent-[#E8701A]"
           />
-          <div className="mt-2 flex justify-between text-[11px] text-black/42">
-            <span>2D</span>
-            <span>{formatTenorFromDays(Math.round(maxDaysToExpiry / 2))}</span>
-            <span>{formatTenorFromDays(maxDaysToExpiry)}</span>
+          <div className="mt-2 flex flex-wrap justify-between gap-2 text-[11px] text-black/42">
+            {maturityLabels.map((label) => (
+              <span key={label}>{label}</span>
+            ))}
           </div>
         </div>
 

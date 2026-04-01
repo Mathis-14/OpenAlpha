@@ -69,6 +69,7 @@ export function computeBlackScholes(
   const delta = optionType === "call" ? nd1 : nd1 - 1;
   const gamma = pdf / (spot * sigma * sqrtT);
   const rawVega = spot * pdf * sqrtT;
+  // Market convention: vega and rho are quoted per 1 vol/rate point (1%), not per unit 1.00 move.
   const vega = rawVega / 100;
   const volga = (rawVega * d1 * d2) / (sigma * 100);
   const vanna = (-pdf * d2) / sigma;
