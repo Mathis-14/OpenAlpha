@@ -267,6 +267,140 @@ export interface NewsResponse {
   data_status?: "complete" | "partial";
 }
 
+// ── Quant Data (Yahoo equity options) ───────────────────────────────────────
+
+export type QuantOptionType = "call" | "put";
+export type QuantLegDirection = "long" | "short";
+export type QuantGreeksMetric =
+  | "price"
+  | "payoff"
+  | "delta"
+  | "gamma"
+  | "vega"
+  | "theta"
+  | "rho"
+  | "volga"
+  | "vanna"
+  | "speed";
+
+export interface QuantOptionContract {
+  contract_symbol: string;
+  option_type: QuantOptionType;
+  strike: number;
+  expiration: string;
+  last_price: number | null;
+  bid: number | null;
+  ask: number | null;
+  midpoint: number | null;
+  implied_volatility: number | null;
+  volume: number | null;
+  open_interest: number | null;
+  in_the_money: boolean;
+  last_trade_date: string | null;
+}
+
+export interface QuantOptionExpiration {
+  expiration: string;
+  days_to_expiry: number;
+  time_to_expiry_years: number;
+  calls: QuantOptionContract[];
+  puts: QuantOptionContract[];
+}
+
+export interface QuantOptionChain {
+  symbol: string;
+  name: string;
+  currency: string;
+  exchange: string;
+  spot_price: number;
+  previous_close: number | null;
+  as_of: string | null;
+  available_expirations: string[];
+  selected_expiration?: string;
+  atm_strike: number | null;
+  expiration_count: number;
+  expirations: QuantOptionExpiration[];
+  warnings?: string[];
+  data_status?: "complete" | "partial";
+}
+
+export interface QuantGreeksResult {
+  symbol?: string;
+  option_type: QuantOptionType;
+  strike: number;
+  expiration?: string;
+  spot_price: number;
+  risk_free_rate: number;
+  volatility: number;
+  time_to_expiry_years: number;
+  theoretical_price: number;
+  delta: number;
+  gamma: number;
+  vega: number;
+  theta: number;
+  rho: number;
+  volga: number;
+  vanna: number;
+  speed: number;
+  assumptions: string[];
+}
+
+export interface QuantSurfacePoint {
+  expiration: string;
+  days_to_expiry: number;
+  time_to_expiry_years: number;
+  strike: number;
+  moneyness: number;
+  implied_volatility: number;
+}
+
+export interface QuantSurfaceResult {
+  symbol: string;
+  spot_price: number;
+  x_axis: "moneyness";
+  expirations: string[];
+  days_to_expiry_values: number[];
+  moneyness_values: number[];
+  z_values: Array<Array<number | null>>;
+  points: QuantSurfacePoint[];
+  model?: "ssvi";
+  raw_point_count?: number;
+  filtered_point_count?: number;
+  calibration?: {
+    rho: number;
+    eta: number;
+    gamma: number;
+    butterfly_margin: number;
+    calendar_valid: boolean;
+    loss: number;
+  };
+  warnings?: string[];
+  data_status?: "complete" | "partial";
+}
+
+export interface QuantPayoffLeg {
+  option_type: QuantOptionType;
+  direction: QuantLegDirection;
+  strike: number;
+  premium: number;
+  quantity: number;
+}
+
+export interface QuantPayoffPoint {
+  spot: number;
+  payoff: number;
+}
+
+export interface QuantPayoffResult {
+  symbol?: string;
+  spot_reference: number;
+  legs: QuantPayoffLeg[];
+  points: QuantPayoffPoint[];
+  breakeven_points: number[];
+  max_profit: number | null;
+  max_loss: number | null;
+}
+
 // ── Agent (Mistral) ─────────────────────────────────────────────────────────
 
 export interface AgentRequest {
@@ -278,6 +412,10 @@ export interface AgentRequest {
   commodity_instrument?: CommodityInstrumentSlug;
 }
 
+export interface QuantAgentRequest {
+  query: string;
+}
+
 export type AgentEventType =
   | "tool_call"
   | "tool_result"
@@ -287,6 +425,10 @@ export type AgentEventType =
   | "display_about"
   | "display_download"
   | "display_table"
+  | "display_quant_chain"
+  | "display_quant_greeks"
+  | "display_quant_surface"
+  | "display_quant_payoff"
   | "text"
   | "done"
   | "error";
