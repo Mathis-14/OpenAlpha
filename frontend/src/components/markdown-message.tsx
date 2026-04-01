@@ -146,19 +146,38 @@ export default function MarkdownMessage({
             </em>
           ),
           a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={
-                isLight
-                  ? "text-[#161616] underline underline-offset-2 hover:text-black/72"
-                  : "text-primary underline underline-offset-2 hover:text-primary/80"
-              }
-            >
-              {children}
-            </a>
+            href && href.trim() ? (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={
+                  isLight
+                    ? "text-[#161616] underline underline-offset-2 hover:text-black/72"
+                    : "text-primary underline underline-offset-2 hover:text-primary/80"
+                }
+              >
+                {children}
+              </a>
+            ) : (
+              <span>{children}</span>
+            )
           ),
+          img: ({ src, alt }) => {
+            const normalizedSrc = typeof src === "string" ? src.trim() : "";
+            if (!normalizedSrc) {
+              return null;
+            }
+
+            return (
+              <img
+                src={normalizedSrc}
+                alt={alt ?? ""}
+                loading="lazy"
+                className="my-2 max-h-[360px] w-auto rounded-lg border border-black/[0.08] object-contain"
+              />
+            );
+          },
           code: ({ className: codeClassName, children, ...props }) => {
             const isInline = !codeClassName;
             if (isInline) {

@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   BrainCircuit,
-  Calculator,
   ChartNoAxesCombined,
   Coins,
   Database,
@@ -23,6 +22,7 @@ import CommoditySearch from "@/components/commodity-search";
 import CryptoSearch from "@/components/crypto-search";
 import MacroSearch from "@/components/macro-search";
 import AgentChat from "@/components/dashboard/agent-chat";
+import QuantAlphaIcon from "@/components/quant-alpha-icon";
 import RequestQuotaBadge from "@/components/request-quota-badge";
 
 const FEATURE_CARDS = [
@@ -236,20 +236,20 @@ export default function LandingPage() {
 
           <button
             type="button"
-            disabled
-            className="relative flex h-full items-start gap-3 rounded-[14px] border border-black/[0.08] bg-[#fbfcff] p-3.5 text-left opacity-80"
+            onClick={() => router.push("/quant")}
+            className="relative flex h-full items-start gap-3 rounded-[14px] border border-[#E8701A]/14 bg-[#fffaf5] p-3.5 text-left transition-colors hover:bg-[#ffefe0]"
           >
-            <div className="mt-0.5 rounded-[10px] bg-[#eef5ff] p-2 text-[#1080ff]">
-              <Calculator className="h-4 w-4" />
+            <div className="mt-0.5 rounded-[10px] bg-[#fff0e2] p-2 text-[#E8701A]">
+              <QuantAlphaIcon className="h-4 w-4" />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-medium text-[#161616]">Quantitative tools</p>
+              <p className="text-sm font-medium text-[#161616]">Quant Alpha</p>
               <p className="text-xs font-light leading-5 text-black/62">
-                Greeks, vol surfaces, and more soon.
+                Options analytics, volatility surfaces, and Greeks for U.S. equities.
               </p>
             </div>
-            <span className="absolute right-3 top-3 rounded-full bg-[#f4f8ff] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-black/52">
-              Soon
+            <span className="absolute right-3 top-3 rounded-full bg-[#fff0e2] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[#c85f14]">
+              Live
             </span>
           </button>
         </div>
@@ -267,7 +267,14 @@ export default function LandingPage() {
         <div className="absolute left-6 top-3 z-20 lg:left-8">
           <RequestQuotaBadge />
         </div>
-        <div className="absolute right-6 top-3 z-20 lg:right-8">
+        <div className="absolute right-6 top-3 z-20 flex items-center gap-2 lg:right-8">
+          <Link
+            href="/quant"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-[10px] border border-[#E8701A]/16 bg-[#fff6ed] px-3.5 text-sm text-[#c85f14] shadow-[0_16px_30px_-24px_rgba(232,112,26,0.28)] backdrop-blur-sm transition-colors hover:bg-[#ffefe0]"
+          >
+            <QuantAlphaIcon className="h-4 w-4" />
+            Quant Alpha
+          </Link>
           <button
             type="button"
             disabled

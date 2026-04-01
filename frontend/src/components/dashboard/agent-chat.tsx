@@ -1,15 +1,17 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { sendGAEvent } from "@next/third-parties/google";
 import AgentAlphaIcon from "@/components/agent-alpha-icon";
+import QuantAlphaIcon from "@/components/quant-alpha-icon";
 import MarkdownMessage from "@/components/markdown-message";
 import UsageUnlockModal from "@/components/usage-unlock-modal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   QuotaExhaustedError,
   streamAgent,
+  streamQuantAgent,
   type AgentSSE,
 } from "@/lib/api";
 import { useUsageQuota } from "@/components/usage-quota-provider";
@@ -103,14 +105,33 @@ interface ChatMessage {
   entries?: ChatEntry[];
 }
 
+type AgentAccent = "blue" | "orange";
+type AgentIdentity = "alpha" | "quant";
+
 interface AgentChatProps {
   ticker?: string;
-  variant?: "dashboard" | "landing";
+  variant?: "dashboard" | "landing" | "quant";
   autoFocusInput?: boolean;
   macroCountry?: MacroCountry;
   cryptoInstrument?: CryptoInstrument;
   commodityInstrument?: CommodityInstrumentSlug;
   dataAssistant?: boolean;
+  apiPath?: "/api/agent" | "/api/quant-agent";
+  agentName?: string;
+  agentIdentity?: AgentIdentity;
+  accent?: AgentAccent;
+  headerVariant?: "default" | "hero";
+  headerRightContent?: ReactNode;
+  introTextOverride?: string;
+  headerDescriptionOverride?: string;
+  hideHeader?: boolean;
+  suggestionsOverride?: string[];
+  showSuggestionsOverride?: boolean;
+  placeholderOverride?: string;
+  onEvent?: (event: AgentSSE) => void;
+  renderDisplayEntriesInline?: boolean;
+  prefillInput?: string | null;
+  prefillNonce?: number;
 }
 
 const TICKER_SUGGESTIONS = [
@@ -133,7 +154,13 @@ const LANDING_SUGGESTIONS = [
   "What's Nvidia's current price trend?",
   "What are the latest U.S. inflation data?",
   "What's the latest trend in gold?",
-  "How is Bitcoin performing this week?",
+];
+
+const QUANT_SUGGESTIONS = [
+  "Show me the NVDA volatility surface.",
+  "Fetch the AAPL option chain and summarize the nearest expiry.",
+  "Compute the Greeks for a SPY 550 call expiring next month.",
+  "Build the payoff diagram for a TSLA call spread.",
 ];
 
 const DATA_SUGGESTIONS = [
@@ -180,6 +207,46 @@ function getCommoditySuggestions(
   ];
 }
 
+function getAccentClasses(accent: AgentAccent) {
+  if (accent === "orange") {
+    return {
+      solidButton: "bg-[#E8701A] text-white hover:bg-[#cf6112]",
+      userBubble: "border border-[#E8701A]/18 bg-[#E8701A] text-white",
+      softSurface: "border border-black/[0.08] bg-[#fff4ec]",
+      softSurfaceHover: "hover:bg-[#ffe8d8] hover:text-[#161616]",
+      inputSurface:
+        "min-w-0 flex-1 rounded-[12px] border border-black/[0.08] bg-[#fff4ec] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]",
+      inputFocus:
+        "focus-within:border-[#E8701A]/36 focus-within:ring-4 focus-within:ring-[#E8701A]/12",
+      iconSurface: "border border-black/[0.08] bg-[#fff4ec]",
+      titleAccent: "text-[#c85f14]",
+      subtleText: "text-black/62",
+    };
+  }
+
+  return {
+    solidButton: "bg-[#1080ff] text-white hover:bg-[#006fe6]",
+    userBubble: "border border-black/[0.08] bg-[#1080ff] text-white shadow-none",
+    softSurface: "border border-black/[0.08] bg-[#f4f8ff]",
+    softSurfaceHover: "hover:bg-[#e9f3ff] hover:text-[#161616]",
+    inputSurface:
+      "min-w-0 flex-1 rounded-[12px] border border-black/[0.08] bg-[#f4f8ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]",
+    inputFocus:
+      "focus-within:border-[#1080ff]/36 focus-within:ring-4 focus-within:ring-[#1080ff]/12",
+    iconSurface: "border border-black/[0.08] bg-[#f4f8ff]",
+    titleAccent: "text-[#161616]",
+    subtleText: "text-black/62",
+  };
+}
+
+function renderAgentIcon(identity: AgentIdentity, variant: "default" | "light", className?: string) {
+  if (identity === "quant") {
+    return <QuantAlphaIcon className={className} />;
+  }
+
+  return <AgentAlphaIcon tone={variant} className={className} />;
+}
+
 export default function AgentChat({
   ticker,
   variant = "dashboard",
@@ -188,6 +255,22 @@ export default function AgentChat({
   cryptoInstrument,
   commodityInstrument,
   dataAssistant = false,
+  apiPath = "/api/agent",
+  agentName,
+  agentIdentity = "alpha",
+  accent = "blue",
+  headerVariant = "default",
+  headerRightContent,
+  introTextOverride,
+  headerDescriptionOverride,
+  hideHeader = false,
+  suggestionsOverride,
+  showSuggestionsOverride,
+  placeholderOverride,
+  onEvent,
+  renderDisplayEntriesInline = true,
+  prefillInput,
+  prefillNonce,
 }: AgentChatProps) {
   const router = useRouter();
   const {
@@ -201,10 +284,18 @@ export default function AgentChat({
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
+  const [prefillHighlight, setPrefillHighlight] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const lastAppliedPrefillKeyRef = useRef<string | null>(null);
+  const prefillHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accentClasses = getAccentClasses(accent);
 
   const isLanding = variant === "landing";
+  const isQuant = agentIdentity === "quant" || variant === "quant";
+  const displayVariant: "dashboard" | "landing" = isLanding ? "landing" : "dashboard";
   const landingCompactEmpty = isLanding && messages.length === 0 && !streaming;
   const landingHasConversation = isLanding && (messages.length > 0 || streaming);
   const cryptoMeta = cryptoInstrument
@@ -213,6 +304,43 @@ export default function AgentChat({
   const commodityMeta = commodityInstrument
     ? getCommodityMeta(commodityInstrument)
     : null;
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const prefillKey =
+      prefillInput == null ? null : `${String(prefillNonce ?? "none")}::${prefillInput}`;
+
+    if (
+      prefillInput == null ||
+      lastAppliedPrefillKeyRef.current === prefillKey ||
+      streaming
+    ) {
+      return;
+    }
+
+    setInput(prefillInput);
+    lastAppliedPrefillKeyRef.current = prefillKey;
+    setPrefillHighlight(true);
+    if (prefillHighlightTimeoutRef.current) {
+      clearTimeout(prefillHighlightTimeoutRef.current);
+    }
+    prefillHighlightTimeoutRef.current = setTimeout(() => {
+      setPrefillHighlight(false);
+      prefillHighlightTimeoutRef.current = null;
+    }, 1400);
+    inputRef.current?.focus();
+  }, [prefillInput, prefillNonce, streaming]);
+
+  useEffect(() => {
+    return () => {
+      if (prefillHighlightTimeoutRef.current) {
+        clearTimeout(prefillHighlightTimeoutRef.current);
+      }
+    };
+  }, []);
 
   function scrollToBottom() {
     requestAnimationFrame(() => {
@@ -245,44 +373,74 @@ export default function AgentChat({
     let requestFailed = false;
 
     try {
-      for await (const sse of streamAgent(
-        {
-          query: trimmedQuery,
-          ticker,
-          dashboard_context: dataAssistant
-            ? "data"
-            : commodityInstrument
-            ? "commodity"
-            : cryptoInstrument
-              ? "crypto"
-              : macroCountry
-                ? "macro"
-                : undefined,
-          country: macroCountry,
-          crypto_instrument: cryptoInstrument,
-          commodity_instrument: commodityInstrument,
-        },
-        controller.signal,
-        {
-          onAccepted: (remaining) => {
-            requestAccepted = true;
-            setMessages((prev) => [
-              ...prev,
-              { role: "user", content: trimmedQuery },
-              { role: "assistant", content: "", entries: [] },
-            ]);
-            setInput("");
-            if (remaining != null) {
-              setRemaining(remaining);
-            } else if (quota && !quotaUnavailable) {
-              setRemaining(Math.max(0, quota.remaining - 1));
-            } else {
-              void refresh();
-            }
-            scrollToBottom();
-          },
-        },
-      )) {
+      const stream =
+        apiPath === "/api/quant-agent"
+          ? streamQuantAgent(
+              { query: trimmedQuery },
+              controller.signal,
+              {
+                onAccepted: (remaining) => {
+                  requestAccepted = true;
+                  setMessages((prev) => [
+                    ...prev,
+                    { role: "user", content: trimmedQuery },
+                    { role: "assistant", content: "", entries: [] },
+                  ]);
+                  setInput("");
+                  if (remaining != null) {
+                    setRemaining(remaining);
+                  } else if (quota && !quotaUnavailable) {
+                    setRemaining(Math.max(0, quota.remaining - 1));
+                  } else {
+                    void refresh();
+                  }
+                  scrollToBottom();
+                },
+              },
+            )
+          : streamAgent(
+              {
+                query: trimmedQuery,
+                ticker,
+                dashboard_context: dataAssistant
+                  ? "data"
+                  : commodityInstrument
+                  ? "commodity"
+                  : cryptoInstrument
+                    ? "crypto"
+                    : macroCountry
+                      ? "macro"
+                      : undefined,
+                country: macroCountry,
+                crypto_instrument: cryptoInstrument,
+                commodity_instrument: commodityInstrument,
+              },
+              controller.signal,
+              {
+                onAccepted: (remaining) => {
+                  requestAccepted = true;
+                  setMessages((prev) => [
+                    ...prev,
+                    { role: "user", content: trimmedQuery },
+                    { role: "assistant", content: "", entries: [] },
+                  ]);
+                  setInput("");
+                  if (remaining != null) {
+                    setRemaining(remaining);
+                  } else if (quota && !quotaUnavailable) {
+                    setRemaining(Math.max(0, quota.remaining - 1));
+                  } else {
+                    void refresh();
+                  }
+                  scrollToBottom();
+                },
+              },
+            );
+
+      for await (const sse of stream) {
+        if (sse.event !== "done") {
+          onEvent?.(sse);
+        }
         if (sse.event === "done") {
           if (requestAccepted && !requestFailed) {
             sendGAEvent("event", "agent_request_completed");
@@ -385,21 +543,29 @@ export default function AgentChat({
     ? TICKER_SUGGESTIONS
     : dataAssistant
       ? DATA_SUGGESTIONS
+    : isQuant
+      ? QUANT_SUGGESTIONS
     : commodityInstrument
       ? getCommoditySuggestions(commodityInstrument)
     : cryptoInstrument
       ? CRYPTO_SUGGESTIONS[cryptoInstrument]
-    : macroCountry
+      : macroCountry
       ? MACRO_SUGGESTIONS[macroCountry]
       : isLanding
         ? LANDING_SUGGESTIONS
         : GENERAL_SUGGESTIONS;
-  const showSuggestions = messages.length === 0 && !streaming;
+  const interactiveBodyReady = !isQuant || mounted;
+  const showSuggestions =
+    interactiveBodyReady &&
+    (showSuggestionsOverride ?? true) && messages.length === 0 && !streaming;
+  const resolvedSuggestions = suggestionsOverride ?? suggestions;
 
   const placeholderText = ticker
     ? `Ask about ${ticker}...`
     : dataAssistant
       ? "Describe your project and what data you need..."
+    : isQuant
+      ? "Ask about U.S. equity options, vol surfaces, or payoff diagrams..."
     : commodityInstrument
       ? `Ask about ${commodityMeta?.name ?? commodityInstrument}...`
     : cryptoInstrument
@@ -407,6 +573,7 @@ export default function AgentChat({
     : macroCountry
       ? `Ask about ${macroCountry === "fr" ? "France" : "U.S."} macro data...`
       : "Ask about any stock or market...";
+  const resolvedPlaceholder = placeholderOverride ?? placeholderText;
 
   const introText = ticker ? (
     <>
@@ -432,11 +599,29 @@ export default function AgentChat({
     `Ask about ${
       macroCountry === "fr" ? "France" : "U.S."
     } inflation, rates, growth, or labor data. Alpha will use the macro dashboard context before answering.`
+  ) : isQuant ? (
+    "Ask about U.S. equity options. Quant Alpha can fetch option chains, compute Greeks, build volatility surfaces, and model multi-leg payoff diagrams."
   ) : (
     "Ask about stocks, commodities, macro trends, or supported crypto markets. The agent will fetch real data before answering."
   );
+  const resolvedIntroText = introTextOverride ?? introText;
   const showLandingIntro =
     !isLanding || Boolean(ticker || commodityInstrument);
+  const resolvedAgentName =
+    agentName ??
+    (dataAssistant ? "Data assistant" : isQuant ? "Quant Alpha" : "Alpha");
+  const headerDescription = headerDescriptionOverride ??
+    (dataAssistant
+      ? "Describe your project and what data you need. Alpha will do it for you."
+      : isQuant
+      ? "Ask about U.S. equity options. Quant Alpha will use live options data before answering."
+      : commodityInstrument && commodityMeta
+      ? `Ask about ${commodityMeta.name}. Alpha will stay grounded in this commodity dashboard.`
+      : cryptoInstrument && cryptoMeta
+      ? `Ask about ${cryptoMeta.symbol}. Alpha will stay grounded in Deribit market data from this ${cryptoMeta.detailLabel.toLowerCase()} dashboard.`
+      : macroCountry
+      ? `Ask about ${macroCountry === "fr" ? "France" : "U.S."} macro data. Alpha will use the dashboard context before answering.`
+      : `Ask about ${ticker}. Alpha will pull live data before answering.`);
 
   return (
     <Card
@@ -454,46 +639,85 @@ export default function AgentChat({
           : cn(
               "h-full rounded-[16px] border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]",
               dataAssistant && "shadow-[0_30px_60px_-36px_rgba(0,0,0,0.12)]",
+              isQuant && "border-[#E8701A]/16 shadow-[0_28px_60px_-42px_rgba(232,112,26,0.28)]",
             ),
       )}
     >
-      <CardHeader
-        className={cn(
-          "shrink-0",
-          isLanding ? "pb-1.5 pt-4" : "pb-3",
-        )}
-      >
-        {isLanding ? (
-          <div className="space-y-2 text-center">
-            <div className="space-y-1.5">
-              <CardTitle className="text-[1.7rem] font-medium tracking-tight text-[#161616] sm:text-[1.9rem]">
-                Ask Alpha
-              </CardTitle>
-              <p className="mx-auto max-w-[48rem] text-sm leading-6 font-light text-black/68 sm:text-[15px]">
-                Ask about stocks, commodities, macro trends, or supported crypto markets, then open a dedicated dashboard when you need to go deeper.
-              </p>
+      {!hideHeader && (
+        <CardHeader
+          className={cn(
+            "shrink-0",
+            isLanding ? "pb-1.5 pt-4" : headerVariant === "hero" ? "pb-4 pt-5" : "pb-3",
+          )}
+        >
+          {isLanding ? (
+            <div className="space-y-2 text-center">
+              <div className="space-y-1.5">
+                <CardTitle className="text-[1.7rem] font-medium tracking-tight text-[#161616] sm:text-[1.9rem]">
+                  {resolvedAgentName}
+                </CardTitle>
+                <p className="mx-auto max-w-[48rem] text-sm leading-6 font-light text-black/68 sm:text-[15px]">
+                  {headerDescription}
+                </p>
+              </div>
             </div>
-          </div>
-        ) : (
+          ) : headerVariant === "hero" ? (
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-3">
+                <div className="flex items-start gap-4">
+                  <div
+                    className={cn(
+                      "rounded-[18px] border p-3.5 shadow-[0_18px_34px_-28px_rgba(0,0,0,0.16)]",
+                      accent === "orange"
+                        ? "border-[#E8701A]/16 bg-[#fff3e8] shadow-[0_18px_34px_-28px_rgba(232,112,26,0.28)]"
+                        : "border-black/[0.08] bg-[#eef5ff]",
+                    )}
+                  >
+                    {renderAgentIcon(agentIdentity, "light", "h-12 w-12")}
+                  </div>
+                  <div className="space-y-1.5">
+                    <p
+                      className={cn(
+                        "text-[11px] font-medium uppercase tracking-[0.2em]",
+                        accent === "orange" ? "text-[#c85f14]" : "text-[#1080ff]",
+                      )}
+                    >
+                      {isQuant ? "Quant workspace" : "Agent workspace"}
+                    </p>
+                    <CardTitle className="text-[2rem] font-medium tracking-tight text-[#161616]">
+                      {resolvedAgentName}
+                    </CardTitle>
+                  </div>
+                </div>
+                {headerDescription ? (
+                  <p className={cn("max-w-[40rem] text-sm leading-6 font-light", accentClasses.subtleText)}>
+                    {headerDescription}
+                  </p>
+                ) : null}
+              </div>
+              {headerRightContent ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {headerRightContent}
+                </div>
+              ) : null}
+            </div>
+          ) : (
             <div className="space-y-1.5">
               <CardTitle className="flex items-center gap-2 text-[#161616]">
-              <AgentAlphaIcon tone="light" className="h-[1.75rem] w-[1.75rem]" />
-              {dataAssistant ? "Data assistant" : "Alpha"}
-            </CardTitle>
-            <p className="text-sm font-light text-black/62">
-              {dataAssistant
-                ? "Describe your project and what data you need. Alpha will do it for you."
-                : commodityInstrument && commodityMeta
-                ? `Ask about ${commodityMeta.name}. Alpha will stay grounded in this commodity dashboard.`
-                : cryptoInstrument && cryptoMeta
-                ? `Ask about ${cryptoMeta.symbol}. Alpha will stay grounded in Deribit market data from this ${cryptoMeta.detailLabel.toLowerCase()} dashboard.`
-                : macroCountry
-                ? `Ask about ${macroCountry === "fr" ? "France" : "U.S."} macro data. Alpha will use the dashboard context before answering.`
-                : `Ask about ${ticker}. Alpha will pull live data before answering.`}
-            </p>
-          </div>
-        )}
-      </CardHeader>
+                {renderAgentIcon(agentIdentity, "light", "h-[1.75rem] w-[1.75rem]")}
+                <span className={isQuant ? accentClasses.titleAccent : undefined}>
+                  {resolvedAgentName}
+                </span>
+              </CardTitle>
+              {headerDescription ? (
+                <p className={cn("text-sm font-light", accentClasses.subtleText)}>
+                  {headerDescription}
+                </p>
+              ) : null}
+            </div>
+          )}
+        </CardHeader>
+      )}
 
       <CardContent
         className={cn(
@@ -508,7 +732,12 @@ export default function AgentChat({
               ? landingCompactEmpty
                 ? "space-y-3 px-1 pb-0 pt-0 text-left"
                 : "min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-4 px-1 pb-1 pt-0 text-left"
-              : "min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-4 rounded-[14px] border border-black/[0.08] bg-[#f8fbff] p-4 pr-3",
+              : cn(
+                  "min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-4 rounded-[14px] border p-4 pr-3",
+                  isQuant
+                    ? "border-[#E8701A]/12 bg-[#fffaf5]"
+                    : "border-black/[0.08] bg-[#f8fbff]",
+                ),
           )}
         >
           {showSuggestions && (
@@ -519,11 +748,11 @@ export default function AgentChat({
                   "mx-auto flex max-w-3xl flex-col items-center pt-0 text-center",
               )}
             >
-              {showLandingIntro && (
+              {showLandingIntro && resolvedIntroText ? (
                 <div className={cn("space-y-3", dataAssistant && "space-y-2")}>
                   <p
                     className={cn(
-                      "text-muted-foreground",
+                      accentClasses.subtleText,
                       isLanding
                         ? "mx-auto max-w-2xl text-[15px] leading-7 font-light text-black/66"
                         : dataAssistant
@@ -531,10 +760,10 @@ export default function AgentChat({
                           : "text-sm",
                     )}
                   >
-                    {introText}
+                    {resolvedIntroText}
                   </p>
                 </div>
-              )}
+              ) : null}
               <div
                 className={cn(
                   "flex flex-wrap gap-2.5",
@@ -542,17 +771,25 @@ export default function AgentChat({
                   dataAssistant && "gap-2",
                 )}
               >
-                {suggestions.map((s) => (
+                {resolvedSuggestions.map((s) => (
                   <button
                     key={s}
                     onClick={() => handleSend(s)}
                     className={cn(
                       "rounded-full border transition-colors",
                       isLanding
-                        ? "border-black/[0.08] bg-[#f4f8ff] px-4 py-2 text-xs font-normal text-black/74 hover:bg-[#e9f3ff] hover:text-[#161616]"
+                        ? cn(
+                            accentClasses.softSurface,
+                            accentClasses.softSurfaceHover,
+                            "px-4 py-2 text-xs font-normal text-black/74",
+                          )
                         : dataAssistant
                           ? "border-black/[0.08] bg-white px-3 py-2 text-xs text-black/68 hover:bg-[#f4f8ff] hover:text-[#161616]"
-                          : "border-black/[0.08] bg-white px-3 py-1.5 text-xs text-black/62 hover:bg-[#f4f8ff] hover:text-[#161616]",
+                          : cn(
+                              accentClasses.softSurface,
+                              accentClasses.softSurfaceHover,
+                              "px-3 py-1.5 text-xs text-black/62",
+                            ),
                     )}
                   >
                     {s}
@@ -562,12 +799,16 @@ export default function AgentChat({
             </div>
           )}
 
-          {messages.map((msg, i) => (
+          {interactiveBodyReady &&
+            messages.map((msg, i) => (
             <MessageBubble
               key={`${msg.role}-${i}-${msg.content.slice(0, 32)}`}
               message={msg}
               streaming={streaming && i === messages.length - 1}
-              variant={variant}
+              variant={displayVariant}
+              agentIdentity={agentIdentity}
+              accent={accent}
+              renderDisplayEntriesInline={renderDisplayEntriesInline}
               onOpenTicker={(symbol) => router.push(`/dashboard/${symbol}`)}
               onOpenMacro={(country) =>
                 router.push(country === "fr" ? "/macro?country=fr" : "/macro")
@@ -597,16 +838,21 @@ export default function AgentChat({
             <>
               <div
                 className={cn(
-                  "min-w-0 flex-1 rounded-[12px] border border-black/[0.08] bg-[#f4f8ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]",
-                  "focus-within:border-[#1080ff]/36 focus-within:ring-4 focus-within:ring-[#1080ff]/12",
+                  accentClasses.inputSurface,
+                  accentClasses.inputFocus,
+                  prefillHighlight &&
+                    (accent === "orange"
+                      ? "animate-pulse border-[#E8701A]/50 bg-[#fff1e3] ring-4 ring-[#E8701A]/18 shadow-[0_0_0_1px_rgba(232,112,26,0.14),0_0_28px_-8px_rgba(232,112,26,0.56)]"
+                      : "animate-pulse border-[#1080ff]/50 bg-[#eaf4ff] ring-4 ring-[#1080ff]/16 shadow-[0_0_0_1px_rgba(16,128,255,0.14),0_0_28px_-8px_rgba(16,128,255,0.48)]"),
                 )}
               >
                 <input
+                  ref={inputRef}
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   autoFocus={autoFocusInput}
-                  placeholder={placeholderText}
+                  placeholder={resolvedPlaceholder}
                   disabled={streaming}
                   className="h-10 w-full rounded-[12px] border-0 bg-transparent px-4 text-sm text-[#161616] outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
                 />
@@ -623,16 +869,21 @@ export default function AgentChat({
             <>
               <div
                 className={cn(
-                  "min-w-0 flex-1 rounded-[12px] border border-black/[0.08] bg-[#f4f8ff] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]",
-                  "focus-within:border-[#1080ff]/36 focus-within:ring-4 focus-within:ring-[#1080ff]/12",
+                  accentClasses.inputSurface,
+                  accentClasses.inputFocus,
+                  prefillHighlight &&
+                    (accent === "orange"
+                      ? "animate-pulse border-[#E8701A]/50 bg-[#fff1e3] ring-4 ring-[#E8701A]/18 shadow-[0_0_0_1px_rgba(232,112,26,0.14),0_0_28px_-8px_rgba(232,112,26,0.56)]"
+                      : "animate-pulse border-[#1080ff]/50 bg-[#eaf4ff] ring-4 ring-[#1080ff]/16 shadow-[0_0_0_1px_rgba(16,128,255,0.14),0_0_28px_-8px_rgba(16,128,255,0.48)]"),
                 )}
               >
                 <input
+                  ref={inputRef}
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   autoFocus={autoFocusInput}
-                  placeholder={placeholderText}
+                  placeholder={resolvedPlaceholder}
                   disabled={streaming}
                   className="h-10 w-full rounded-[12px] border-0 bg-transparent px-4 text-sm text-[#161616] outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
                 />
@@ -641,12 +892,17 @@ export default function AgentChat({
                 type="submit"
                 aria-disabled={!input.trim() || undefined}
                 className={cn(
-                  "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-[10px] bg-[#1080ff] px-4 text-sm font-medium text-white transition-colors hover:bg-[#006fe6]",
+                  "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-[10px] px-4 text-sm font-medium transition-colors",
+                  accentClasses.solidButton,
+                  prefillHighlight &&
+                    (accent === "orange"
+                      ? "animate-pulse shadow-[0_0_24px_-8px_rgba(232,112,26,0.68)]"
+                      : "animate-pulse shadow-[0_0_24px_-8px_rgba(16,128,255,0.6)]"),
                   !input.trim() && "pointer-events-none opacity-50",
                 )}
               >
                 <Send className="h-4 w-4" />
-                {isLanding && <span>Ask</span>}
+                {isLanding && <span>{isQuant ? "Analyze" : "Ask"}</span>}
               </button>
             </>
           )}
@@ -852,6 +1108,9 @@ function MessageBubble({
   message,
   streaming,
   variant,
+  agentIdentity,
+  accent,
+  renderDisplayEntriesInline,
   onOpenTicker,
   onOpenMacro,
   onOpenCrypto,
@@ -861,21 +1120,23 @@ function MessageBubble({
   message: ChatMessage;
   streaming: boolean;
   variant: "dashboard" | "landing";
+  agentIdentity: AgentIdentity;
+  accent: AgentAccent;
+  renderDisplayEntriesInline: boolean;
   onOpenTicker: (ticker: string) => void;
   onOpenMacro: (country: MacroCountry) => void;
   onOpenCrypto: (instrument: CryptoInstrument) => void;
   onOpenCommodity: (instrument: CommodityInstrumentSlug) => void;
   onOpenDownload: (href: string) => void;
 }) {
+  const accentClasses = getAccentClasses(accent);
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
         <div
           className={cn(
             "max-w-[80%] rounded-[14px] rounded-br-[8px] px-4 py-2.5 text-sm text-foreground",
-              variant === "landing" || variant === "dashboard"
-                ? "border border-black/[0.08] bg-[#1080ff] text-white shadow-none"
-                : "bg-primary/15",
+            accentClasses.userBubble,
           )}
         >
           {message.content}
@@ -968,15 +1229,15 @@ function MessageBubble({
         />
       )}
 
-      {displayMetrics.map((entry, i) => (
+      {renderDisplayEntriesInline && displayMetrics.map((entry, i) => (
         <MetricDisplay key={`metric-${i}`} metrics={entry.metrics} variant={variant} />
       ))}
 
-      {displayCharts.map((entry, i) => (
+      {renderDisplayEntriesInline && displayCharts.map((entry, i) => (
         <ChartDisplay key={`chart-${i}`} entry={entry} variant={variant} />
       ))}
 
-      {displayDownloads.map((entry, i) => (
+      {renderDisplayEntriesInline && displayDownloads.map((entry, i) => (
         <DownloadSuggestionCard
           key={`download-${i}`}
           entry={entry}
@@ -985,7 +1246,7 @@ function MessageBubble({
         />
       ))}
 
-      {displayAboutCards.map((entry, i) => (
+      {renderDisplayEntriesInline && displayAboutCards.map((entry, i) => (
         <AboutSuggestionCard
           key={`about-${i}`}
           entry={entry}
@@ -998,15 +1259,10 @@ function MessageBubble({
           <div
             className={cn(
               "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
-              variant === "landing" || variant === "dashboard"
-                ? "border border-black/[0.08] bg-[#f4f8ff]"
-                : "bg-primary/15",
+              accentClasses.iconSurface,
             )}
           >
-            <AgentAlphaIcon
-              tone={variant === "landing" || variant === "dashboard" ? "light" : "default"}
-              className="h-[1.45rem] w-[1.45rem]"
-            />
+            {renderAgentIcon(agentIdentity, "light", "h-[1.45rem] w-[1.45rem]")}
           </div>
           <div
             className={cn(

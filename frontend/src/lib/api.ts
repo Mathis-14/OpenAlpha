@@ -20,6 +20,7 @@ import type {
   NewsResponse,
   PeriodType,
   PricePoint,
+  QuantAgentRequest,
   TickerOverview,
   UnlockQuotaRequest,
   UsageQuota,
@@ -267,14 +268,15 @@ export async function unlockUsageQuota(
 
 // ── Agent SSE ────────────────────────────────────────────────────────────────
 
-export async function* streamAgent(
-  request: AgentRequest,
+async function* streamAgentAtPath(
+  path: string,
+  request: unknown,
   signal?: AbortSignal,
   options?: {
     onAccepted?: (remaining: number | null) => void;
   },
 ): AsyncGenerator<AgentEvent> {
-  const res = await fetch("/api/agent", {
+  const res = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -339,6 +341,26 @@ export async function* streamAgent(
   } finally {
     reader.releaseLock();
   }
+}
+
+export async function* streamAgent(
+  request: AgentRequest,
+  signal?: AbortSignal,
+  options?: {
+    onAccepted?: (remaining: number | null) => void;
+  },
+): AsyncGenerator<AgentEvent> {
+  yield* streamAgentAtPath("/api/agent", request, signal, options);
+}
+
+export async function* streamQuantAgent(
+  request: QuantAgentRequest,
+  signal?: AbortSignal,
+  options?: {
+    onAccepted?: (remaining: number | null) => void;
+  },
+): AsyncGenerator<AgentEvent> {
+  yield* streamAgentAtPath("/api/quant-agent", request, signal, options);
 }
 
 export { ApiError };
