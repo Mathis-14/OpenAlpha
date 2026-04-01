@@ -85,7 +85,7 @@ test("crypto news recap no longer declines and uses focused news", () => {
   });
 
   assert.equal(policy.mode, "analysis");
-  assert.deepEqual(policy.requiredTools, ["get_news"]);
+  assert.deepEqual(policy.requiredTools, ["get_crypto_overview", "get_news"]);
   assert.ok(policy.allowedTools.includes("get_context_news"));
 });
 
@@ -96,4 +96,52 @@ test("general casual queries do not force a stock overview tool", () => {
 
   assert.equal(policy.strictSubject, "general");
   assert.deepEqual(policy.requiredTools, []);
+});
+
+test("generic geopolitics requests stay on the broad context tool", () => {
+  const policy = createAgentPolicy({
+    query: "Tell me about geopolitics",
+  });
+
+  assert.equal(policy.strictSubject, "general");
+  assert.deepEqual(policy.requiredTools, ["get_context_news"]);
+  assert.deepEqual(policy.allowedTools, ["get_context_news"]);
+});
+
+test("global market headline prompts use context news only", () => {
+  const policy = createAgentPolicy({
+    query: "Summarize world market headlines",
+  });
+
+  assert.equal(policy.strictSubject, "general");
+  assert.deepEqual(policy.requiredTools, ["get_context_news"]);
+  assert.deepEqual(policy.allowedTools, ["get_context_news"]);
+});
+
+test("commodity geopolitical backdrop prompts require overview plus context news", () => {
+  const policy = createAgentPolicy({
+    query: "How is geopolitics affecting gold?",
+    dashboard_context: "commodity",
+    commodity_instrument: "gold",
+  });
+
+  assert.equal(policy.mode, "analysis");
+  assert.deepEqual(policy.requiredTools, [
+    "get_commodity_overview",
+    "get_context_news",
+  ]);
+});
+
+test("crypto broader context prompts require overview plus context news", () => {
+  const policy = createAgentPolicy({
+    query: "Give me broader market context for Bitcoin",
+    dashboard_context: "crypto",
+    crypto_instrument: "BTC-PERPETUAL",
+  });
+
+  assert.equal(policy.mode, "analysis");
+  assert.deepEqual(policy.requiredTools, [
+    "get_crypto_overview",
+    "get_context_news",
+  ]);
 });

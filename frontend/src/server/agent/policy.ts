@@ -117,7 +117,7 @@ function isNewsQuestion(query: string): boolean {
 }
 
 function isDriverQuestion(query: string): boolean {
-  return /\b(driver|drivers|what matters|what moved|what is driving|backdrop|risk|geopolitic|geopolitical)\b/i.test(
+  return /\b(driver|drivers|what matters|what moved|what is driving|backdrop|risk|risks|geopolitic(?:s|al)?|affect(?:ing|ed|s)?|impact(?:ing|ed|s)?|broader market|market context|broader context|world market|global risk|global risks)\b/i.test(
     query,
   );
 }
@@ -204,6 +204,27 @@ function looksCommodityQuery(query: string): boolean {
   );
 }
 
+function looksBroadContextQuery(query: string): boolean {
+  const hasBroadCue =
+    /\b(global|world|broader|backdrop|market context|broader context|world market|market headlines?|global news|world news|global risks?|geopolitic(?:s|al)?|risk sentiment|get_context_news)\b/i.test(
+      query,
+    ) ||
+    ((isNewsQuestion(query) || isDriverQuestion(query)) &&
+      /\b(markets?|world|global)\b/i.test(query));
+
+  if (!hasBroadCue) {
+    return false;
+  }
+
+  if (looksCommodityQuery(query) || looksCryptoQuery(query)) {
+    return false;
+  }
+
+  return !/\b(stock|stocks|ticker|tickers|share|shares|company|companies|fundamentals?|valuation|filing|10-k|10-q|sec|earnings)\b/i.test(
+    query,
+  );
+}
+
 function looksStockQuery(query: string): boolean {
   return (
     isNewsQuestion(query) ||
@@ -212,7 +233,8 @@ function looksStockQuery(query: string): boolean {
     /\b(stock|stocks|ticker|tickers|shares?|company|companies|compare|overview|snapshot|price action|momentum|watchlist)\b/i.test(
       query,
     ) ||
-    /\b(tell me about|what's going on with|summarize)\b/i.test(query)
+    (/\b(tell me about|what's going on with|summarize)\b/i.test(query) &&
+      !looksBroadContextQuery(query))
   );
 }
 
@@ -286,6 +308,20 @@ function buildStockPolicy(request: AgentRequest, query: string): AgentPolicy {
   };
 }
 
+function buildBroadContextPolicy(): AgentPolicy {
+  return {
+    mode: "analysis",
+    requiredTools: ["get_context_news"],
+    allowedTools: ["get_context_news"],
+    strictSubject: "general",
+    answerGuidance: [
+      "Treat this as a generic broad market, geopolitical, macro, or risk-backdrop request.",
+      "Use get_context_news only; do not pivot to focused news or asset-specific tools unless the user explicitly names a supported asset, ticker, or indicator.",
+      "Keep the answer at the backdrop level rather than turning it into a stock or company answer.",
+    ],
+  };
+}
+
 function buildMacroPolicy(request: AgentRequest, query: string): AgentPolicy {
   if (mentionsUnsupportedMacroMetric(query)) {
     return buildDeclinePolicy(
@@ -356,11 +392,16 @@ function buildCommodityPolicy(request: AgentRequest, query: string): AgentPolicy
 
   const requiredTools: AgentToolName[] = [];
   let allowedTools: AgentToolName[] = ["get_commodity_overview"];
+  const wantsFocusedNews = isNewsQuestion(query);
+  const wantsContext = isDriverQuestion(query);
 
-  if (isNewsQuestion(query) || isDriverQuestion(query)) {
-    requiredTools.push("get_news");
+  if (wantsFocusedNews || wantsContext) {
+    requiredTools.push("get_commodity_overview");
     allowedTools = ["get_news", "get_context_news", "get_commodity_overview"];
-    if (isDriverQuestion(query)) {
+    if (wantsFocusedNews) {
+      requiredTools.push("get_news");
+    }
+    if (wantsContext) {
       requiredTools.push("get_context_news");
     }
   } else if (isCommodityHistoryQuestion(query)) {
@@ -379,6 +420,7 @@ function buildCommodityPolicy(request: AgentRequest, query: string): AgentPolicy
     preferredCommodityInstrument: request.commodity_instrument ?? undefined,
     answerGuidance: [
       "Stay grounded in the active commodity dashboard only.",
+      "For focused headlines, stay on the active commodity rather than using a generic commodities query.",
       "Do not pivot to another commodity after declining an unsupported one.",
     ],
   };
@@ -399,11 +441,16 @@ function buildCryptoPolicy(request: AgentRequest, query: string): AgentPolicy {
 
   const requiredTools: AgentToolName[] = [];
   let allowedTools: AgentToolName[] = ["get_crypto_overview"];
+  const wantsFocusedNews = isNewsQuestion(query);
+  const wantsContext = isDriverQuestion(query);
 
-  if (isNewsQuestion(query) || isDriverQuestion(query)) {
-    requiredTools.push("get_news");
+  if (wantsFocusedNews || wantsContext) {
+    requiredTools.push("get_crypto_overview");
     allowedTools = ["get_news", "get_context_news", "get_crypto_overview"];
-    if (isDriverQuestion(query)) {
+    if (wantsFocusedNews) {
+      requiredTools.push("get_news");
+    }
+    if (wantsContext) {
       requiredTools.push("get_context_news");
     }
   } else if (isCryptoHistoryQuestion(query)) {
@@ -422,6 +469,7 @@ function buildCryptoPolicy(request: AgentRequest, query: string): AgentPolicy {
     preferredCryptoInstrument: request.crypto_instrument ?? undefined,
     answerGuidance: [
       "Stay grounded in the active Deribit instrument only.",
+      "For focused headlines, stay on the active crypto instrument rather than using a generic crypto or market query.",
       "Do not convert open interest into a different unit unless the tool output explicitly labels that unit.",
     ],
   };
@@ -444,6 +492,10 @@ export function createAgentPolicy(request: AgentRequest): AgentPolicy {
 
   if (request.dashboard_context === "crypto") {
     return buildCryptoPolicy(request, query);
+  }
+
+  if (looksBroadContextQuery(query)) {
+    return buildBroadContextPolicy();
   }
 
   if (looksMacroQuery(query)) {

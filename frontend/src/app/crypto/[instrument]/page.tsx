@@ -135,68 +135,67 @@ export default async function CryptoInstrumentPage({
   ) : null;
 
   const detailsWidget = overview ? (
-    <Card
-      key="crypto-metadata"
-      className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
-    >
-      <CardHeader>
-        <CardTitle className="text-[#161616]">Instrument details</CardTitle>
-      </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-        <DetailStat
-          label="Market"
-          value={`${marketMeta.name} ${marketMeta.detailLabel.toLowerCase()}`}
-        />
-        <DetailStat label="Status" value={overview.status} />
-        <DetailStat label="Index" value={overview.price_index} />
-        <DetailStat label="Settlement" value={overview.settlement_period} />
-        <DetailStat
-          label="Contract size"
-          value={formatValue(overview.contract_size)}
-        />
-        <DetailStat label="Tick size" value={formatValue(overview.tick_size)} />
-        <DetailStat
-          label="Min trade amount"
-          value={formatValue(overview.min_trade_amount)}
-        />
-        <DetailStat
-          label="Max leverage"
-          value={
-            overview.max_leverage != null
-              ? `${overview.max_leverage.toFixed(0)}x`
-              : "—"
-          }
-        />
-        <DetailStat
-          label="Maker / taker"
-          value={
-            overview.maker_commission != null && overview.taker_commission != null
-              ? `${(overview.maker_commission * 100).toFixed(3)}% / ${(overview.taker_commission * 100).toFixed(3)}%`
-              : "—"
-          }
-        />
-        <DetailStat
-          label="Created"
-          value={formatTimestamp(overview.creation_timestamp)}
-        />
-        <DetailStat
-          label="Expiry"
-          value={
-            overview.settlement_period === "perpetual"
-              ? "Perpetual"
-              : formatTimestamp(overview.expiration_timestamp)
-          }
-        />
-        <DetailStat
-          label="Best bid / ask"
-          value={`${formatValue(overview.best_bid_price)} / ${formatValue(overview.best_ask_price)}`}
-        />
-      </CardContent>
-    </Card>
+    <div key="crypto-metadata" className="h-[560px] min-h-0">
+      <Card className="flex h-full flex-col rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
+        <CardHeader>
+          <CardTitle className="text-[#161616]">Instrument details</CardTitle>
+        </CardHeader>
+        <CardContent className="grid flex-1 grid-cols-1 gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <DetailStat
+            label="Market"
+            value={`${marketMeta.name} ${marketMeta.detailLabel.toLowerCase()}`}
+          />
+          <DetailStat label="Status" value={overview.status} />
+          <DetailStat label="Index" value={overview.price_index} />
+          <DetailStat label="Settlement" value={overview.settlement_period} />
+          <DetailStat
+            label="Contract size"
+            value={formatValue(overview.contract_size)}
+          />
+          <DetailStat label="Tick size" value={formatValue(overview.tick_size)} />
+          <DetailStat
+            label="Min trade amount"
+            value={formatValue(overview.min_trade_amount)}
+          />
+          <DetailStat
+            label="Max leverage"
+            value={
+              overview.max_leverage != null
+                ? `${overview.max_leverage.toFixed(0)}x`
+                : "—"
+            }
+          />
+          <DetailStat
+            label="Maker / taker"
+            value={
+              overview.maker_commission != null && overview.taker_commission != null
+                ? `${(overview.maker_commission * 100).toFixed(3)}% / ${(overview.taker_commission * 100).toFixed(3)}%`
+                : "—"
+            }
+          />
+          <DetailStat
+            label="Created"
+            value={formatTimestamp(overview.creation_timestamp)}
+          />
+          <DetailStat
+            label="Expiry"
+            value={
+              overview.settlement_period === "perpetual"
+                ? "Perpetual"
+                : formatTimestamp(overview.expiration_timestamp)
+            }
+          />
+          <DetailStat
+            label="Best bid / ask"
+            value={`${formatValue(overview.best_bid_price)} / ${formatValue(overview.best_ask_price)}`}
+          />
+        </CardContent>
+      </Card>
+    </div>
   ) : null;
 
   const newsWidget = (
-    <div className="h-[520px] min-h-0">
+    <div className="h-[560px] min-h-0">
       <NewsFeed
         articles={[]}
         fillHeight
@@ -207,6 +206,8 @@ export default async function CryptoInstrumentPage({
             articles: focusedNews.articles,
             warnings: focusedNews.warnings,
             error: focusedNewsError,
+            emptyStateMessage:
+              "No specific news on this asset. Broader market news is shown below.",
           },
           {
             id: "crypto-context-news",
@@ -289,6 +290,7 @@ export default async function CryptoInstrumentPage({
           chartWidget={chartWidget}
           bottomLeftWidgets={detailsWidget}
           bottomRightWidgets={newsWidget}
+          splitBottomColumns="news-heavy"
           agentPanel={
             <AgentChat
               key={`crypto-agent-${instrument}`}

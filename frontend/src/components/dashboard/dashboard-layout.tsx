@@ -10,6 +10,8 @@ interface DashboardLayoutProps {
   bottomRightWidgets?: ReactNode;
   dataWidgets?: ReactNode;
   agentPanel: ReactNode;
+  splitBottomColumns?: "sidebar" | "equal" | "news-heavy";
+  bottomWidgetsFullWidth?: boolean;
 }
 
 export default function DashboardLayout({
@@ -20,6 +22,8 @@ export default function DashboardLayout({
   bottomRightWidgets,
   dataWidgets,
   agentPanel,
+  splitBottomColumns = "sidebar",
+  bottomWidgetsFullWidth = false,
 }: DashboardLayoutProps) {
   const topWidgetNodes = Children.toArray(topWidgets);
   const bottomWidgetNodes = Children.toArray(bottomWidgets);
@@ -44,7 +48,7 @@ export default function DashboardLayout({
                   <div className="space-y-5">{topWidgetNodes}</div>
                   {chartWidget ? <div className="min-h-0">{chartWidget}</div> : null}
                 </div>
-                {!hasSplitBottomLayout ? bottomWidgetNodes : null}
+                {!hasSplitBottomLayout && !bottomWidgetsFullWidth ? bottomWidgetNodes : null}
               </div>
             ) : (
               <div className="space-y-6">{dataWidgetNodes}</div>
@@ -60,8 +64,18 @@ export default function DashboardLayout({
           </aside>
         </div>
 
+        {!hasSplitBottomLayout && bottomWidgetsFullWidth ? bottomWidgetNodes : null}
+
         {hasSplitBottomLayout ? (
-          <div className="grid items-stretch gap-6 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
+          <div
+            className={`grid items-stretch gap-6 ${
+              splitBottomColumns === "equal"
+                ? "grid-cols-2"
+                : splitBottomColumns === "news-heavy"
+                  ? "grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)]"
+                : "xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_380px]"
+            }`}
+          >
             <div className="min-w-0 space-y-6">{bottomLeftWidgetNodes}</div>
             <div className="min-w-0 space-y-6">{bottomRightWidgetNodes}</div>
           </div>
