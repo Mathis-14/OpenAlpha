@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Loader2, LockKeyhole } from "lucide-react";
 import { unlockUsageQuota } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import type { UsageQuota } from "@/types/api";
 
@@ -17,6 +18,7 @@ export default function UsageUnlockModal({
   onClose: () => void;
   onUnlocked: (quota: UsageQuota) => void;
 }) {
+  const { getIdToken } = useAuth();
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export default function UsageUnlockModal({
     setError(null);
 
     try {
-      const quota = await unlockUsageQuota({ password });
+      const quota = await unlockUsageQuota({ password }, await getIdToken());
       onUnlocked(quota);
     } catch (unlockError) {
       setError(

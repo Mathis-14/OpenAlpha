@@ -2,9 +2,8 @@ import {
   clearUnlockGuardCookieHeader,
   decrementQuota,
   getQuotaCookieMaxAgeSeconds,
-  getQuotaLimit,
+  getQuotaConfig,
   getQuotaMax,
-  getQuotaRefill,
   getUnlockGuard,
   getUnlockLockoutSeconds,
   getUnlockMaxFailures,
@@ -13,6 +12,7 @@ import {
   registerUnlockFailure,
   verifyOverridePassword,
 } from "@/server/usage/quota";
+import { getFirebaseUserIdFromRequest } from "@/server/auth/firebase";
 import { runRedisCommand, runRedisEval } from "@/server/usage/upstash";
 
 export type QuotaMode = "redis" | "legacy_cookie";
@@ -36,6 +36,11 @@ type UnlockGuardState = {
 };
 
 const LOCALHOST_IDENTITY = "127.0.0.1";
+
+type ResolvedQuotaIdentity = {
+  key: string;
+  authenticated: boolean;
+};
 
 const QUOTA_INIT_SCRIPT = `
 local limit = tonumber(ARGV[1])
@@ -177,13 +182,30 @@ async function resolveQuotaMode(): Promise<QuotaMode> {
   return isQuotaEnabled() ? "redis" : "legacy_cookie";
 }
 
-function resolveRedisIdentity(request: Request): string {
+function resolveIpIdentity(request: Request): string {
   const ip = getRequestIp(request);
   if (!ip) {
     throw new Error("Unable to resolve client identity");
   }
 
   return `ip:${ip}`;
+}
+
+async function resolveQuotaIdentity(
+  request: Request,
+): Promise<ResolvedQuotaIdentity> {
+  const userId = await getFirebaseUserIdFromRequest(request);
+  if (userId) {
+    return {
+      key: `uid:${userId}`,
+      authenticated: true,
+    };
+  }
+
+  return {
+    key: resolveIpIdentity(request),
+    authenticated: false,
+  };
 }
 
 function getQuotaKey(identity: string): string {
@@ -221,13 +243,16 @@ function toTuple(value: unknown): [number, number] {
   return [toNumber(value[0]), toNumber(value[1])];
 }
 
-async function getRedisQuotaSnapshot(identity: string): Promise<number> {
+async function getRedisQuotaSnapshot(
+  identity: string,
+  limit: number,
+): Promise<number> {
   return toNumber(
     await runRedisEval<number>(
       QUOTA_INIT_SCRIPT,
       [getQuotaKey(identity)],
       [
-        getQuotaLimit(),
+        limit,
         getQuotaMax(),
         getQuotaCookieMaxAgeSeconds(),
       ],
@@ -235,7 +260,10 @@ async function getRedisQuotaSnapshot(identity: string): Promise<number> {
   );
 }
 
-async function decrementRedisQuota(identity: string): Promise<{
+async function decrementRedisQuota(
+  identity: string,
+  limit: number,
+): Promise<{
   allowed: boolean;
   remaining: number;
 }> {
@@ -244,7 +272,7 @@ async function decrementRedisQuota(identity: string): Promise<{
       QUOTA_DECREMENT_SCRIPT,
       [getQuotaKey(identity)],
       [
-        getQuotaLimit(),
+        limit,
         getQuotaMax(),
         getQuotaCookieMaxAgeSeconds(),
       ],
@@ -257,14 +285,18 @@ async function decrementRedisQuota(identity: string): Promise<{
   };
 }
 
-async function refillRedisQuota(identity: string): Promise<number> {
+async function refillRedisQuota(
+  identity: string,
+  limit: number,
+  refill: number,
+): Promise<number> {
   return toNumber(
     await runRedisEval<number>(
       QUOTA_REFILL_SCRIPT,
       [getQuotaKey(identity)],
       [
-        getQuotaLimit(),
-        getQuotaRefill(),
+        limit,
+        refill,
         getQuotaMax(),
         getQuotaCookieMaxAgeSeconds(),
       ],
@@ -327,13 +359,15 @@ export async function assertQuotaAvailable(request: Request): Promise<void> {
     return;
   }
 
-  resolveRedisIdentity(request);
+  await resolveQuotaIdentity(request);
 }
 
 export async function getUsageQuotaState(request: Request): Promise<QuotaState> {
+  const identity = await resolveQuotaIdentity(request);
+  const quotaConfig = getQuotaConfig(identity.authenticated);
   const mode = await resolveQuotaMode();
   if (mode === "legacy_cookie") {
-    const initialized = initializeQuota(getCookieHeader(request));
+    const initialized = initializeQuota(getCookieHeader(request), quotaConfig);
     return {
       limit: initialized.limit,
       remaining: initialized.remaining,
@@ -342,11 +376,10 @@ export async function getUsageQuotaState(request: Request): Promise<QuotaState> 
     };
   }
 
-  const identity = resolveRedisIdentity(request);
-  const remaining = await getRedisQuotaSnapshot(identity);
+  const remaining = await getRedisQuotaSnapshot(identity.key, quotaConfig.limit);
 
   return {
-    limit: getQuotaLimit(),
+    limit: quotaConfig.limit,
     remaining,
     mode,
     setCookieHeaders: [],
@@ -354,9 +387,11 @@ export async function getUsageQuotaState(request: Request): Promise<QuotaState> 
 }
 
 export async function decrementUsageQuota(request: Request): Promise<QuotaDecision> {
+  const identity = await resolveQuotaIdentity(request);
+  const quotaConfig = getQuotaConfig(identity.authenticated);
   const mode = await resolveQuotaMode();
   if (mode === "legacy_cookie") {
-    const decision = decrementQuota(getCookieHeader(request));
+    const decision = decrementQuota(getCookieHeader(request), quotaConfig);
     return {
       limit: decision.limit,
       remaining: decision.remaining,
@@ -366,11 +401,10 @@ export async function decrementUsageQuota(request: Request): Promise<QuotaDecisi
     };
   }
 
-  const identity = resolveRedisIdentity(request);
-  const decision = await decrementRedisQuota(identity);
+  const decision = await decrementRedisQuota(identity.key, quotaConfig.limit);
 
   return {
-    limit: getQuotaLimit(),
+    limit: quotaConfig.limit,
     remaining: decision.remaining,
     allowed: decision.allowed,
     mode,
@@ -390,8 +424,8 @@ export async function getUsageUnlockGuard(request: Request): Promise<UnlockGuard
     };
   }
 
-  const identity = resolveRedisIdentity(request);
-  const guard = await getRedisUnlockGuard(identity);
+  const identity = await resolveQuotaIdentity(request);
+  const guard = await getRedisUnlockGuard(identity.key);
 
   return {
     blocked: guard.blocked,
@@ -415,8 +449,8 @@ export async function registerUsageUnlockFailure(
     };
   }
 
-  const identity = resolveRedisIdentity(request);
-  const failure = await registerRedisUnlockFailure(identity);
+  const identity = await resolveQuotaIdentity(request);
+  const failure = await registerRedisUnlockFailure(identity.key);
 
   return {
     blocked: failure.blocked,
@@ -427,9 +461,11 @@ export async function registerUsageUnlockFailure(
 }
 
 export async function refillUsageQuota(request: Request): Promise<QuotaState> {
+  const identity = await resolveQuotaIdentity(request);
+  const quotaConfig = getQuotaConfig(identity.authenticated);
   const mode = await resolveQuotaMode();
   if (mode === "legacy_cookie") {
-    const refilled = refillQuota(getCookieHeader(request));
+    const refilled = refillQuota(getCookieHeader(request), quotaConfig);
     return {
       limit: refilled.limit,
       remaining: refilled.remaining,
@@ -438,12 +474,15 @@ export async function refillUsageQuota(request: Request): Promise<QuotaState> {
     };
   }
 
-  const identity = resolveRedisIdentity(request);
-  const remaining = await refillRedisQuota(identity);
-  await clearRedisUnlockGuard(identity);
+  const remaining = await refillRedisQuota(
+    identity.key,
+    quotaConfig.limit,
+    quotaConfig.refill,
+  );
+  await clearRedisUnlockGuard(identity.key);
 
   return {
-    limit: getQuotaLimit(),
+    limit: quotaConfig.limit,
     remaining,
     mode,
     setCookieHeaders: [],
@@ -456,8 +495,8 @@ export async function clearUsageUnlockGuard(request: Request): Promise<string[]>
     return [clearUnlockGuardCookieHeader()];
   }
 
-  const identity = resolveRedisIdentity(request);
-  await clearRedisUnlockGuard(identity);
+  const identity = await resolveQuotaIdentity(request);
+  await clearRedisUnlockGuard(identity.key);
   return [];
 }
 

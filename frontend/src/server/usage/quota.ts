@@ -2,8 +2,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 const QUOTA_COOKIE_NAME = "oa_agent_quota";
 const UNLOCK_GUARD_COOKIE_NAME = "oa_agent_unlock_guard";
-const QUOTA_LIMIT = 20;
-const QUOTA_REFILL = 20;
+const ANON_QUOTA_LIMIT = 10;
+const AUTH_QUOTA_LIMIT = 20;
+const ANON_QUOTA_REFILL = 20;
+const AUTH_QUOTA_REFILL = 20;
 const QUOTA_MAX = 1_000;
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 90;
 const UNLOCK_MAX_FAILURES = 5;
@@ -12,9 +14,15 @@ const DEV_SIGNING_SECRET = "openalpha-dev-request-quota-secret";
 const DEV_OVERRIDE_PASSWORD = "openalpha-dev-password";
 
 type QuotaCookieState =
-  | { status: "absent"; remaining: number }
-  | { status: "invalid"; remaining: 0 }
-  | { status: "valid"; remaining: number };
+  | { status: "absent"; remaining: number; storedLimit: number | null }
+  | { status: "invalid"; remaining: 0; storedLimit: number | null }
+  | { status: "valid"; remaining: number; storedLimit: number | null };
+
+type QuotaConfig = {
+  limit: number;
+  refill: number;
+  max: number;
+};
 
 type UnlockGuardPayload = {
   failedAttempts: number;
@@ -110,16 +118,25 @@ function clampLockedUntil(value: number | null): number | null {
   return Math.max(0, Math.trunc(value));
 }
 
-function encodePayload(remaining: number): string {
-  return Buffer.from(JSON.stringify({ remaining: clampRemaining(remaining) }))
+function encodePayload(
+  remaining: number,
+  limit: number,
+): string {
+  return Buffer.from(JSON.stringify({
+    remaining: clampRemaining(remaining),
+    limit,
+  }))
     .toString("base64url");
 }
 
-function decodePayload(encodedPayload: string): number | null {
+function decodePayload(encodedPayload: string): {
+  remaining: number;
+  limit: number | null;
+} | null {
   try {
     const parsed = JSON.parse(
       Buffer.from(encodedPayload, "base64url").toString("utf8"),
-    ) as { remaining?: unknown };
+    ) as { remaining?: unknown; limit?: unknown };
 
     if (typeof parsed.remaining !== "number") {
       return null;
@@ -133,7 +150,17 @@ function decodePayload(encodedPayload: string): number | null {
       return null;
     }
 
-    return parsed.remaining;
+    const parsedLimit =
+      typeof parsed.limit === "number" &&
+      Number.isInteger(parsed.limit) &&
+      parsed.limit > 0
+        ? parsed.limit
+        : null;
+
+    return {
+      remaining: parsed.remaining,
+      limit: parsedLimit,
+    };
   } catch {
     return null;
   }
@@ -224,93 +251,119 @@ function createClearedCookieHeader(name: string): string {
 
 export function readQuotaCookieState(
   cookieHeader: string | null,
+  config: QuotaConfig = getQuotaConfig(false),
 ): QuotaCookieState {
   const raw = readCookieValue(cookieHeader, QUOTA_COOKIE_NAME);
   if (!raw) {
-    return { status: "absent", remaining: QUOTA_LIMIT };
+    return { status: "absent", remaining: config.limit, storedLimit: null };
   }
 
   const [encodedPayload, signature] = raw.split(".");
   if (!encodedPayload || !signature) {
-    return { status: "invalid", remaining: 0 };
+    return { status: "invalid", remaining: 0, storedLimit: null };
   }
 
   const expected = sign(encodedPayload);
   if (!safeEqual(signature, expected)) {
-    return { status: "invalid", remaining: 0 };
+    return { status: "invalid", remaining: 0, storedLimit: null };
   }
 
-  const remaining = decodePayload(encodedPayload);
-  if (remaining == null) {
-    return { status: "invalid", remaining: 0 };
+  const payload = decodePayload(encodedPayload);
+  if (payload == null) {
+    return { status: "invalid", remaining: 0, storedLimit: null };
   }
 
-  return { status: "valid", remaining };
+  const storedLimit = payload.limit;
+  const normalizedRemaining =
+    storedLimit != null && config.limit > storedLimit
+      ? clampRemaining(payload.remaining + (config.limit - storedLimit))
+      : payload.remaining;
+
+  return {
+    status: "valid",
+    remaining: normalizedRemaining,
+    storedLimit,
+  };
 }
 
-export function getQuotaSnapshot(cookieHeader: string | null): {
+export function getQuotaSnapshot(
+  cookieHeader: string | null,
+  config: QuotaConfig = getQuotaConfig(false),
+): {
   limit: number;
   remaining: number;
   source: QuotaCookieState["status"];
 } {
-  const state = readQuotaCookieState(cookieHeader);
+  const state = readQuotaCookieState(cookieHeader, config);
 
   return {
-    limit: QUOTA_LIMIT,
+    limit: config.limit,
     remaining: state.remaining,
     source: state.status,
   };
 }
 
-export function createQuotaCookieHeader(remaining: number): string {
+export function createQuotaCookieHeader(
+  remaining: number,
+  config: QuotaConfig = getQuotaConfig(false),
+): string {
   const normalized = clampRemaining(remaining);
-  const encodedPayload = encodePayload(normalized);
+  const encodedPayload = encodePayload(normalized, config.limit);
   return createSignedCookieHeader(QUOTA_COOKIE_NAME, encodedPayload);
 }
 
-export function decrementQuota(cookieHeader: string | null): {
+export function decrementQuota(
+  cookieHeader: string | null,
+  config: QuotaConfig = getQuotaConfig(false),
+): {
   limit: number;
   remaining: number;
   allowed: boolean;
   cookieHeader: string;
 } {
-  const snapshot = getQuotaSnapshot(cookieHeader);
+  const snapshot = getQuotaSnapshot(cookieHeader, config);
   const nextRemaining = snapshot.remaining > 0 ? snapshot.remaining - 1 : 0;
 
   return {
     limit: snapshot.limit,
     remaining: nextRemaining,
     allowed: snapshot.remaining > 0,
-    cookieHeader: createQuotaCookieHeader(nextRemaining),
+    cookieHeader: createQuotaCookieHeader(nextRemaining, config),
   };
 }
 
-export function refillQuota(cookieHeader: string | null): {
+export function refillQuota(
+  cookieHeader: string | null,
+  config: QuotaConfig = getQuotaConfig(false),
+): {
   limit: number;
   remaining: number;
   cookieHeader: string;
 } {
-  const snapshot = getQuotaSnapshot(cookieHeader);
-  const nextRemaining = clampRemaining(snapshot.remaining + QUOTA_REFILL);
+  const snapshot = getQuotaSnapshot(cookieHeader, config);
+  const nextRemaining = clampRemaining(snapshot.remaining + config.refill);
 
   return {
     limit: snapshot.limit,
     remaining: nextRemaining,
-    cookieHeader: createQuotaCookieHeader(nextRemaining),
+    cookieHeader: createQuotaCookieHeader(nextRemaining, config),
   };
 }
 
-export function initializeQuota(cookieHeader: string | null): {
+export function initializeQuota(
+  cookieHeader: string | null,
+  config: QuotaConfig = getQuotaConfig(false),
+): {
   limit: number;
   remaining: number;
   cookieHeader: string;
 } {
-  const snapshot = getQuotaSnapshot(cookieHeader);
+  const snapshot = getQuotaSnapshot(cookieHeader, config);
 
   return {
     limit: snapshot.limit,
     remaining: snapshot.remaining,
-    cookieHeader: createQuotaCookieHeader(snapshot.remaining),
+    cookieHeader: createQuotaCookieHeader(snapshot.remaining, config),
   };
 }
 
@@ -323,16 +376,24 @@ export function verifyOverridePassword(candidate: string): boolean {
   return safeEqual(normalized, getOverridePassword());
 }
 
-export function getQuotaLimit(): number {
-  return QUOTA_LIMIT;
+export function getQuotaLimit(authenticated = false): number {
+  return authenticated ? AUTH_QUOTA_LIMIT : ANON_QUOTA_LIMIT;
 }
 
-export function getQuotaRefill(): number {
-  return QUOTA_REFILL;
+export function getQuotaRefill(authenticated = false): number {
+  return authenticated ? AUTH_QUOTA_REFILL : ANON_QUOTA_REFILL;
 }
 
 export function getQuotaMax(): number {
   return QUOTA_MAX;
+}
+
+export function getQuotaConfig(authenticated = false): QuotaConfig {
+  return {
+    limit: getQuotaLimit(authenticated),
+    refill: getQuotaRefill(authenticated),
+    max: getQuotaMax(),
+  };
 }
 
 export function getQuotaCookieMaxAgeSeconds(): number {

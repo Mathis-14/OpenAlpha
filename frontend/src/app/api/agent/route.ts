@@ -106,7 +106,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!quota.allowed) {
     const headers = new Headers({
       "Cache-Control": "no-store",
-      Vary: "Cookie",
+      Vary: "Cookie, Authorization",
     });
     appendSetCookies(headers, quota.setCookieHeaders);
 
@@ -148,7 +148,7 @@ export async function POST(request: Request): Promise<Response> {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     "X-Accel-Buffering": "no",
-    Vary: "Cookie",
+    Vary: "Cookie, Authorization",
     "X-Requests-Remaining": String(quota.remaining),
   });
   appendSetCookies(headers, quota.setCookieHeaders);

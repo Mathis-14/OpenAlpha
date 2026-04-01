@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { getUsageQuota } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 import type { UsageQuota } from "@/types/api";
 
 type UsageQuotaContextValue = {
@@ -22,9 +23,10 @@ type UsageQuotaContextValue = {
 
 const UsageQuotaContext = createContext<UsageQuotaContextValue | null>(null);
 
-const DEFAULT_LIMIT = 20;
+const DEFAULT_LIMIT = 10;
 
 export function UsageQuotaProvider({ children }: { children: ReactNode }) {
+  const { user, loading: authLoading, getIdToken } = useAuth();
   const [quota, setQuota] = useState<UsageQuota | null>(null);
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
@@ -32,7 +34,7 @@ export function UsageQuotaProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const nextQuota = await getUsageQuota();
+      const nextQuota = await getUsageQuota(await getIdToken());
       setQuota(nextQuota);
       setUnavailable(false);
     } catch {
@@ -40,7 +42,7 @@ export function UsageQuotaProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getIdToken]);
 
   const setRemaining = useCallback((remaining: number) => {
     setQuota((prev) => ({
@@ -51,8 +53,12 @@ export function UsageQuotaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
     void refresh();
-  }, [refresh]);
+  }, [authLoading, refresh, user?.uid]);
 
   const value = useMemo(
     () => ({
