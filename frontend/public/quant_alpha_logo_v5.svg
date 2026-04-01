@@ -1,0 +1,15 @@
+<svg width="100%" viewBox="0 0 680 640" xmlns="http://www.w3.org/2000/svg">
+
+<!-- Q bowl: thick serif-style oval -->
+<ellipse cx="310" cy="270" rx="185" ry="195" fill="none" stroke="#E8701A" stroke-width="28" style="fill:none;stroke:rgb(232, 112, 26);color:rgb(251, 251, 254);stroke-width:28px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+<!-- Double-struck vertical bar inside the left side of the Q -->
+<line x1="175" y1="140" x2="175" y2="400" stroke="#E8701A" stroke-width="8" stroke-linecap="round" style="fill:rgb(0, 0, 0);stroke:rgb(232, 112, 26);color:rgb(251, 251, 254);stroke-width:8px;stroke-linecap:round;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+<!-- Q tail: thick diagonal slash from bottom-right of the bowl -->
+<path d="M 410 410 L 530 560" fill="none" stroke="#E8701A" stroke-width="28" stroke-linecap="round" style="fill:none;stroke:rgb(232, 112, 26);color:rgb(251, 251, 254);stroke-width:28px;stroke-linecap:round;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+<!-- Alpha symbol, centered in the Q bowl -->
+<text x="310" y="280" text-anchor="middle" dominant-baseline="central" font-family="Georgia, 'Times New Roman', serif" font-weight="400" font-size="210" fill="#E8701A" style="fill:rgb(232, 112, 26);stroke:none;color:rgb(251, 251, 254);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:Georgia, &quot;Times New Roman&quot;, serif;font-size:210px;font-weight:400;text-anchor:middle;dominant-baseline:central">α</text>
+
+</svg>
