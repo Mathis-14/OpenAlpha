@@ -1,3 +1,5 @@
+import { decrementUsageQuota } from "@/server/usage/adapter";
+
 const MISTRAL_TRANSCRIBE_URL = "https://api.mistral.ai/v1/audio/transcriptions";
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 const TRANSCRIBE_TIMEOUT_MS = 30_000;
@@ -6,6 +8,12 @@ const ALLOWED_EXTENSIONS = new Set(["webm", "wav", "mp3", "m4a", "mp4", "ogg"]);
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
+
+function appendSetCookies(headers: Headers, values: string[]) {
+  for (const value of values) {
+    headers.append("Set-Cookie", value);
+  }
+}
 
 function getMistralApiKey(): string {
   const key = process.env.MISTRAL_API_KEY?.trim();
@@ -100,6 +108,43 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  let quota;
+  try {
+    quota = await decrementUsageQuota(request, "voice");
+  } catch (error) {
+    return Response.json(
+      {
+        error: "quota_unavailable",
+        detail: (error as Error).message || "Voice quota service unavailable.",
+      },
+      { status: 503 },
+    );
+  }
+
+  if (!quota.allowed) {
+    const headers = new Headers({
+      "Cache-Control": "no-store",
+      Vary: "Cookie, Authorization",
+    });
+    appendSetCookies(headers, quota.setCookieHeaders);
+
+    return Response.json(
+      {
+        error: "quota_exhausted",
+        detail:
+          quota.limit > 5
+            ? "Voice transcription limit reached. Try again later."
+            : "Voice transcription limit reached. Sign in to get 10 voice requests.",
+        remaining: 0,
+        limit: quota.limit,
+      },
+      {
+        status: 429,
+        headers,
+      },
+    );
+  }
+
   const upstreamFormData = new FormData();
   upstreamFormData.append("model", "voxtral-mini-latest");
   upstreamFormData.append("file", upload, upload.name || "voice-input.webm");
@@ -158,5 +203,14 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const text = typeof payload.text === "string" ? payload.text.trim() : "";
-  return Response.json({ text });
+  const headers = new Headers({
+    "Cache-Control": "no-store",
+    Vary: "Cookie, Authorization",
+  });
+  appendSetCookies(headers, quota.setCookieHeaders);
+
+  return new Response(JSON.stringify({ text }), {
+    status: 200,
+    headers,
+  });
 }

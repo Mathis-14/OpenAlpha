@@ -1,11 +1,16 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-const QUOTA_COOKIE_NAME = "oa_agent_quota";
+const AGENT_QUOTA_COOKIE_NAME = "oa_agent_quota";
+const VOICE_QUOTA_COOKIE_NAME = "oa_voice_quota";
 const UNLOCK_GUARD_COOKIE_NAME = "oa_agent_unlock_guard";
 const ANON_QUOTA_LIMIT = 10;
 const AUTH_QUOTA_LIMIT = 20;
+const ANON_VOICE_QUOTA_LIMIT = 5;
+const AUTH_VOICE_QUOTA_LIMIT = 10;
 const ANON_QUOTA_REFILL = 20;
 const AUTH_QUOTA_REFILL = 20;
+const ANON_VOICE_QUOTA_REFILL = 0;
+const AUTH_VOICE_QUOTA_REFILL = 0;
 const QUOTA_MAX = 1_000;
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 90;
 const UNLOCK_MAX_FAILURES = 5;
@@ -23,6 +28,8 @@ type QuotaConfig = {
   refill: number;
   max: number;
 };
+
+export type QuotaScope = "agent" | "voice";
 
 type UnlockGuardPayload = {
   failedAttempts: number;
@@ -249,11 +256,16 @@ function createClearedCookieHeader(name: string): string {
   return `${name}=; ${buildCookieAttributes(0).join("; ")}`;
 }
 
+function getQuotaCookieName(scope: QuotaScope): string {
+  return scope === "voice" ? VOICE_QUOTA_COOKIE_NAME : AGENT_QUOTA_COOKIE_NAME;
+}
+
 export function readQuotaCookieState(
   cookieHeader: string | null,
   config: QuotaConfig = getQuotaConfig(false),
+  scope: QuotaScope = "agent",
 ): QuotaCookieState {
-  const raw = readCookieValue(cookieHeader, QUOTA_COOKIE_NAME);
+  const raw = readCookieValue(cookieHeader, getQuotaCookieName(scope));
   if (!raw) {
     return { status: "absent", remaining: config.limit, storedLimit: null };
   }
@@ -289,12 +301,13 @@ export function readQuotaCookieState(
 export function getQuotaSnapshot(
   cookieHeader: string | null,
   config: QuotaConfig = getQuotaConfig(false),
+  scope: QuotaScope = "agent",
 ): {
   limit: number;
   remaining: number;
   source: QuotaCookieState["status"];
 } {
-  const state = readQuotaCookieState(cookieHeader, config);
+  const state = readQuotaCookieState(cookieHeader, config, scope);
 
   return {
     limit: config.limit,
@@ -306,64 +319,68 @@ export function getQuotaSnapshot(
 export function createQuotaCookieHeader(
   remaining: number,
   config: QuotaConfig = getQuotaConfig(false),
+  scope: QuotaScope = "agent",
 ): string {
   const normalized = clampRemaining(remaining);
   const encodedPayload = encodePayload(normalized, config.limit);
-  return createSignedCookieHeader(QUOTA_COOKIE_NAME, encodedPayload);
+  return createSignedCookieHeader(getQuotaCookieName(scope), encodedPayload);
 }
 
 export function decrementQuota(
   cookieHeader: string | null,
   config: QuotaConfig = getQuotaConfig(false),
+  scope: QuotaScope = "agent",
 ): {
   limit: number;
   remaining: number;
   allowed: boolean;
   cookieHeader: string;
 } {
-  const snapshot = getQuotaSnapshot(cookieHeader, config);
+  const snapshot = getQuotaSnapshot(cookieHeader, config, scope);
   const nextRemaining = snapshot.remaining > 0 ? snapshot.remaining - 1 : 0;
 
   return {
     limit: snapshot.limit,
     remaining: nextRemaining,
     allowed: snapshot.remaining > 0,
-    cookieHeader: createQuotaCookieHeader(nextRemaining, config),
+    cookieHeader: createQuotaCookieHeader(nextRemaining, config, scope),
   };
 }
 
 export function refillQuota(
   cookieHeader: string | null,
   config: QuotaConfig = getQuotaConfig(false),
+  scope: QuotaScope = "agent",
 ): {
   limit: number;
   remaining: number;
   cookieHeader: string;
 } {
-  const snapshot = getQuotaSnapshot(cookieHeader, config);
+  const snapshot = getQuotaSnapshot(cookieHeader, config, scope);
   const nextRemaining = clampRemaining(snapshot.remaining + config.refill);
 
   return {
     limit: snapshot.limit,
     remaining: nextRemaining,
-    cookieHeader: createQuotaCookieHeader(nextRemaining, config),
+    cookieHeader: createQuotaCookieHeader(nextRemaining, config, scope),
   };
 }
 
 export function initializeQuota(
   cookieHeader: string | null,
   config: QuotaConfig = getQuotaConfig(false),
+  scope: QuotaScope = "agent",
 ): {
   limit: number;
   remaining: number;
   cookieHeader: string;
 } {
-  const snapshot = getQuotaSnapshot(cookieHeader, config);
+  const snapshot = getQuotaSnapshot(cookieHeader, config, scope);
 
   return {
     limit: snapshot.limit,
     remaining: snapshot.remaining,
-    cookieHeader: createQuotaCookieHeader(snapshot.remaining, config),
+    cookieHeader: createQuotaCookieHeader(snapshot.remaining, config, scope),
   };
 }
 
@@ -376,11 +393,25 @@ export function verifyOverridePassword(candidate: string): boolean {
   return safeEqual(normalized, getOverridePassword());
 }
 
-export function getQuotaLimit(authenticated = false): number {
+export function getQuotaLimit(
+  authenticated = false,
+  scope: QuotaScope = "agent",
+): number {
+  if (scope === "voice") {
+    return authenticated ? AUTH_VOICE_QUOTA_LIMIT : ANON_VOICE_QUOTA_LIMIT;
+  }
+
   return authenticated ? AUTH_QUOTA_LIMIT : ANON_QUOTA_LIMIT;
 }
 
-export function getQuotaRefill(authenticated = false): number {
+export function getQuotaRefill(
+  authenticated = false,
+  scope: QuotaScope = "agent",
+): number {
+  if (scope === "voice") {
+    return authenticated ? AUTH_VOICE_QUOTA_REFILL : ANON_VOICE_QUOTA_REFILL;
+  }
+
   return authenticated ? AUTH_QUOTA_REFILL : ANON_QUOTA_REFILL;
 }
 
@@ -388,10 +419,13 @@ export function getQuotaMax(): number {
   return QUOTA_MAX;
 }
 
-export function getQuotaConfig(authenticated = false): QuotaConfig {
+export function getQuotaConfig(
+  authenticated = false,
+  scope: QuotaScope = "agent",
+): QuotaConfig {
   return {
-    limit: getQuotaLimit(authenticated),
-    refill: getQuotaRefill(authenticated),
+    limit: getQuotaLimit(authenticated, scope),
+    refill: getQuotaRefill(authenticated, scope),
     max: getQuotaMax(),
   };
 }

@@ -50,6 +50,14 @@ test("initializeQuota seeds the default limit when no cookie is present", () => 
   assert.match(initialized.cookieHeader, /^oa_agent_quota=/);
 });
 
+test("initializeQuota seeds the voice limit with a separate cookie namespace", () => {
+  const initialized = initializeQuota(null, getQuotaConfig(false, "voice"), "voice");
+
+  assert.equal(initialized.limit, 5);
+  assert.equal(initialized.remaining, 5);
+  assert.match(initialized.cookieHeader, /^oa_voice_quota=/);
+});
+
 test("decrementQuota consumes one request from a valid signed cookie", () => {
   const initialCookie = createQuotaCookieHeader(3);
   const decision = decrementQuota(extractCookieValue(initialCookie));
@@ -69,6 +77,18 @@ test("authenticated quota upgrades legacy cookies to the higher tier", () => {
 
   assert.equal(snapshot.limit, 20);
   assert.equal(snapshot.remaining, 14);
+});
+
+test("authenticated voice quota upgrades legacy voice cookies to the higher tier", () => {
+  const anonCookie = createQuotaCookieHeader(2, getQuotaConfig(false, "voice"), "voice");
+  const snapshot = getQuotaSnapshot(
+    extractCookieValue(anonCookie),
+    getQuotaConfig(true, "voice"),
+    "voice",
+  );
+
+  assert.equal(snapshot.limit, 10);
+  assert.equal(snapshot.remaining, 7);
 });
 
 test("invalid quota cookies fail closed instead of resetting quota", () => {

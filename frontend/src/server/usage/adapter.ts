@@ -11,6 +11,7 @@ import {
   refillQuota,
   registerUnlockFailure,
   verifyOverridePassword,
+  type QuotaScope,
 } from "@/server/usage/quota";
 import { getFirebaseUserIdFromRequest } from "@/server/auth/firebase";
 import { runRedisCommand, runRedisEval } from "@/server/usage/upstash";
@@ -208,8 +209,8 @@ async function resolveQuotaIdentity(
   };
 }
 
-function getQuotaKey(identity: string): string {
-  return `openalpha:quota:${identity}:remaining`;
+function getQuotaKey(identity: string, scope: QuotaScope): string {
+  return `openalpha:quota:${scope}:${identity}:remaining`;
 }
 
 function getUnlockAttemptsKey(identity: string): string {
@@ -246,11 +247,12 @@ function toTuple(value: unknown): [number, number] {
 async function getRedisQuotaSnapshot(
   identity: string,
   limit: number,
+  scope: QuotaScope,
 ): Promise<number> {
   return toNumber(
     await runRedisEval<number>(
       QUOTA_INIT_SCRIPT,
-      [getQuotaKey(identity)],
+      [getQuotaKey(identity, scope)],
       [
         limit,
         getQuotaMax(),
@@ -263,6 +265,7 @@ async function getRedisQuotaSnapshot(
 async function decrementRedisQuota(
   identity: string,
   limit: number,
+  scope: QuotaScope,
 ): Promise<{
   allowed: boolean;
   remaining: number;
@@ -270,7 +273,7 @@ async function decrementRedisQuota(
   const [allowedFlag, remaining] = toTuple(
     await runRedisEval<unknown>(
       QUOTA_DECREMENT_SCRIPT,
-      [getQuotaKey(identity)],
+      [getQuotaKey(identity, scope)],
       [
         limit,
         getQuotaMax(),
@@ -289,11 +292,12 @@ async function refillRedisQuota(
   identity: string,
   limit: number,
   refill: number,
+  scope: QuotaScope,
 ): Promise<number> {
   return toNumber(
     await runRedisEval<number>(
       QUOTA_REFILL_SCRIPT,
-      [getQuotaKey(identity)],
+      [getQuotaKey(identity, scope)],
       [
         limit,
         refill,
@@ -362,12 +366,15 @@ export async function assertQuotaAvailable(request: Request): Promise<void> {
   await resolveQuotaIdentity(request);
 }
 
-export async function getUsageQuotaState(request: Request): Promise<QuotaState> {
+export async function getUsageQuotaState(
+  request: Request,
+  scope: QuotaScope = "agent",
+): Promise<QuotaState> {
   const identity = await resolveQuotaIdentity(request);
-  const quotaConfig = getQuotaConfig(identity.authenticated);
+  const quotaConfig = getQuotaConfig(identity.authenticated, scope);
   const mode = await resolveQuotaMode();
   if (mode === "legacy_cookie") {
-    const initialized = initializeQuota(getCookieHeader(request), quotaConfig);
+    const initialized = initializeQuota(getCookieHeader(request), quotaConfig, scope);
     return {
       limit: initialized.limit,
       remaining: initialized.remaining,
@@ -376,7 +383,7 @@ export async function getUsageQuotaState(request: Request): Promise<QuotaState> 
     };
   }
 
-  const remaining = await getRedisQuotaSnapshot(identity.key, quotaConfig.limit);
+  const remaining = await getRedisQuotaSnapshot(identity.key, quotaConfig.limit, scope);
 
   return {
     limit: quotaConfig.limit,
@@ -386,12 +393,15 @@ export async function getUsageQuotaState(request: Request): Promise<QuotaState> 
   };
 }
 
-export async function decrementUsageQuota(request: Request): Promise<QuotaDecision> {
+export async function decrementUsageQuota(
+  request: Request,
+  scope: QuotaScope = "agent",
+): Promise<QuotaDecision> {
   const identity = await resolveQuotaIdentity(request);
-  const quotaConfig = getQuotaConfig(identity.authenticated);
+  const quotaConfig = getQuotaConfig(identity.authenticated, scope);
   const mode = await resolveQuotaMode();
   if (mode === "legacy_cookie") {
-    const decision = decrementQuota(getCookieHeader(request), quotaConfig);
+    const decision = decrementQuota(getCookieHeader(request), quotaConfig, scope);
     return {
       limit: decision.limit,
       remaining: decision.remaining,
@@ -401,7 +411,7 @@ export async function decrementUsageQuota(request: Request): Promise<QuotaDecisi
     };
   }
 
-  const decision = await decrementRedisQuota(identity.key, quotaConfig.limit);
+  const decision = await decrementRedisQuota(identity.key, quotaConfig.limit, scope);
 
   return {
     limit: quotaConfig.limit,
@@ -462,10 +472,10 @@ export async function registerUsageUnlockFailure(
 
 export async function refillUsageQuota(request: Request): Promise<QuotaState> {
   const identity = await resolveQuotaIdentity(request);
-  const quotaConfig = getQuotaConfig(identity.authenticated);
+  const quotaConfig = getQuotaConfig(identity.authenticated, "agent");
   const mode = await resolveQuotaMode();
   if (mode === "legacy_cookie") {
-    const refilled = refillQuota(getCookieHeader(request), quotaConfig);
+    const refilled = refillQuota(getCookieHeader(request), quotaConfig, "agent");
     return {
       limit: refilled.limit,
       remaining: refilled.remaining,
@@ -478,6 +488,7 @@ export async function refillUsageQuota(request: Request): Promise<QuotaState> {
     identity.key,
     quotaConfig.limit,
     quotaConfig.refill,
+    "agent",
   );
   await clearRedisUnlockGuard(identity.key);
 
