@@ -699,7 +699,9 @@ export default function AgentChat({
     }
 
     setInput(transcript);
-    await handleSend(transcript);
+    requestAnimationFrame(() => {
+      void handleSend(transcript);
+    });
   }
 
   const suggestions = ticker

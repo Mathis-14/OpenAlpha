@@ -160,7 +160,9 @@ export default function VoiceInput({
         return;
       }
 
-      await onTranscription(transcript);
+      Promise.resolve(onTranscription(transcript)).catch((error) => {
+        onError((error as Error).message || "Failed to hand off the transcript.");
+      });
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
         if (error instanceof ApiError && error.status === 429) {
