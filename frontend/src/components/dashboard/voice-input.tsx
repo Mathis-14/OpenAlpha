@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Mic, Square } from "lucide-react";
-import { transcribeAudio } from "@/lib/api";
+import { ApiError, transcribeAudio } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type VoiceInputProps = {
@@ -10,6 +10,7 @@ type VoiceInputProps = {
   disabled?: boolean;
   onTranscription: (text: string) => Promise<void> | void;
   onError: (message: string | null) => void;
+  getAuthToken?: () => Promise<string | null>;
 };
 
 const MAX_RECORDING_MS = 30_000;
@@ -71,6 +72,7 @@ export default function VoiceInput({
   disabled = false,
   onTranscription,
   onError,
+  getAuthToken,
 }: VoiceInputProps) {
   const [supported, setSupported] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -149,7 +151,8 @@ export default function VoiceInput({
         `voice-input.${extensionForMimeType(blob.type || mimeTypeHint)}`,
         { type: blob.type || mimeTypeHint || "audio/webm" },
       );
-      const { text } = await transcribeAudio(file, abortRef.current.signal);
+      const authToken = getAuthToken ? await getAuthToken() : null;
+      const { text } = await transcribeAudio(file, abortRef.current.signal, authToken);
       const transcript = text.trim();
 
       if (!transcript) {
@@ -160,6 +163,11 @@ export default function VoiceInput({
       await onTranscription(transcript);
     } catch (error) {
       if ((error as Error).name !== "AbortError") {
+        if (error instanceof ApiError && error.status === 429) {
+          onError(error.message || "Voice transcription limit reached.");
+          return;
+        }
+
         onError((error as Error).message || "Transcription failed. Try again.");
       }
     } finally {

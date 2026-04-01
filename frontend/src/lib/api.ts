@@ -27,7 +27,7 @@ import type {
   UsageQuota,
 } from "@/types/api";
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
@@ -240,12 +240,14 @@ export function getUsageQuota(
 export async function transcribeAudio(
   file: File,
   signal?: AbortSignal,
+  authToken?: string | null,
 ): Promise<TranscriptionResponse> {
   const formData = new FormData();
   formData.append("file", file);
 
   const res = await fetch("/api/transcribe", {
     method: "POST",
+    headers: buildAuthHeaders(authToken),
     body: formData,
     signal,
   });
@@ -407,6 +409,5 @@ export async function* streamQuantAgent(
   yield* streamAgentAtPath("/api/quant-agent", request, signal, options);
 }
 
-export { ApiError };
 export { QuotaExhaustedError };
 export type { AgentEvent as AgentSSE } from "@/types/api";

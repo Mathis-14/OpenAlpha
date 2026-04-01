@@ -1106,6 +1106,7 @@ export default function AgentChat({
                 disabled={streaming}
                 onTranscription={handleVoiceTranscription}
                 onError={setVoiceError}
+                getAuthToken={getIdToken}
               />
               <button
                 type="submit"
