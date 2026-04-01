@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createQuotaCookieHeader,
   decrementQuota,
+  getQuotaConfig,
   getQuotaSnapshot,
   getUnlockGuard,
   initializeQuota,
@@ -44,8 +45,8 @@ test.after(() => {
 test("initializeQuota seeds the default limit when no cookie is present", () => {
   const initialized = initializeQuota(null);
 
-  assert.equal(initialized.limit, 20);
-  assert.equal(initialized.remaining, 20);
+  assert.equal(initialized.limit, 10);
+  assert.equal(initialized.remaining, 10);
   assert.match(initialized.cookieHeader, /^oa_agent_quota=/);
 });
 
@@ -54,9 +55,20 @@ test("decrementQuota consumes one request from a valid signed cookie", () => {
   const decision = decrementQuota(extractCookieValue(initialCookie));
 
   assert.equal(decision.allowed, true);
-  assert.equal(decision.limit, 20);
+  assert.equal(decision.limit, 10);
   assert.equal(decision.remaining, 2);
   assert.match(decision.cookieHeader, /^oa_agent_quota=/);
+});
+
+test("authenticated quota upgrades legacy cookies to the higher tier", () => {
+  const anonCookie = createQuotaCookieHeader(4);
+  const snapshot = getQuotaSnapshot(
+    extractCookieValue(anonCookie),
+    getQuotaConfig(true),
+  );
+
+  assert.equal(snapshot.limit, 20);
+  assert.equal(snapshot.remaining, 14);
 });
 
 test("invalid quota cookies fail closed instead of resetting quota", () => {

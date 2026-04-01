@@ -222,6 +222,10 @@ export interface UnlockQuotaRequest {
   password: string;
 }
 
+export interface TranscriptionResponse {
+  text: string;
+}
+
 // ── SEC Filings (EDGAR) ─────────────────────────────────────────────────────
 
 export interface FilingSection {

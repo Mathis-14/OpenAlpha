@@ -68,7 +68,7 @@ export async function POST(request: Request): Promise<Response> {
       const failedAttempt = await registerUsageUnlockFailure(request);
       const headers = new Headers({
         "Cache-Control": "no-store",
-        Vary: "Cookie",
+        Vary: "Cookie, Authorization",
       });
       appendSetCookies(headers, failedAttempt.setCookieHeaders);
 
@@ -101,7 +101,7 @@ export async function POST(request: Request): Promise<Response> {
     const headers = new Headers({
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
-      Vary: "Cookie",
+      Vary: "Cookie, Authorization",
     });
     appendSetCookies(headers, refilled.setCookieHeaders);
     appendSetCookies(headers, clearHeaders);

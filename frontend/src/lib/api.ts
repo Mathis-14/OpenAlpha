@@ -22,6 +22,7 @@ import type {
   PricePoint,
   QuantAgentRequest,
   TickerOverview,
+  TranscriptionResponse,
   UnlockQuotaRequest,
   UsageQuota,
 } from "@/types/api";
@@ -86,12 +87,25 @@ function getErrorMessageFromBody(
 
 async function fetchJson<T>(
   path: string,
+  init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(path);
+  const res = await fetch(path, init);
   if (!res.ok) {
     throw new ApiError(res.status, await readErrorMessage(res));
   }
   return res.json() as Promise<T>;
+}
+
+function buildAuthHeaders(
+  authToken?: string | null,
+  initial?: HeadersInit,
+): Headers {
+  const headers = new Headers(initial);
+  if (authToken) {
+    headers.set("Authorization", `Bearer ${authToken}`);
+  }
+
+  return headers;
 }
 
 // ── Market ──────────────────────────────────────────────────────────────────
@@ -213,16 +227,43 @@ export async function searchTickers(
 
 // ── Usage Quota ────────────────────────────────────────────────────────────
 
-export function getUsageQuota(): Promise<UsageQuota> {
-  return fetchJson("/api/usage");
+export function getUsageQuota(
+  authToken?: string | null,
+): Promise<UsageQuota> {
+  return fetchJson("/api/usage", {
+    headers: buildAuthHeaders(authToken),
+  });
+}
+
+// ── Transcription ──────────────────────────────────────────────────────────
+
+export async function transcribeAudio(
+  file: File,
+  signal?: AbortSignal,
+): Promise<TranscriptionResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch("/api/transcribe", {
+    method: "POST",
+    body: formData,
+    signal,
+  });
+
+  if (!res.ok) {
+    throw new ApiError(res.status, await readErrorMessage(res));
+  }
+
+  return res.json() as Promise<TranscriptionResponse>;
 }
 
 export async function unlockUsageQuota(
   payload: UnlockQuotaRequest,
+  authToken?: string | null,
 ): Promise<UsageQuota> {
   const res = await fetch("/api/usage/unlock", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: buildAuthHeaders(authToken, { "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
 
@@ -274,11 +315,12 @@ async function* streamAgentAtPath(
   signal?: AbortSignal,
   options?: {
     onAccepted?: (remaining: number | null) => void;
+    authToken?: string | null;
   },
 ): AsyncGenerator<AgentEvent> {
   const res = await fetch(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: buildAuthHeaders(options?.authToken, { "Content-Type": "application/json" }),
     body: JSON.stringify(request),
     signal,
   });
@@ -348,6 +390,7 @@ export async function* streamAgent(
   signal?: AbortSignal,
   options?: {
     onAccepted?: (remaining: number | null) => void;
+    authToken?: string | null;
   },
 ): AsyncGenerator<AgentEvent> {
   yield* streamAgentAtPath("/api/agent", request, signal, options);
@@ -358,6 +401,7 @@ export async function* streamQuantAgent(
   signal?: AbortSignal,
   options?: {
     onAccepted?: (remaining: number | null) => void;
+    authToken?: string | null;
   },
 ): AsyncGenerator<AgentEvent> {
   yield* streamAgentAtPath("/api/quant-agent", request, signal, options);

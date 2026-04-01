@@ -1,12 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { sendGAEvent } from "@next/third-parties/google";
 import AgentAlphaIcon from "@/components/agent-alpha-icon";
+import ConversationHistoryDialog from "@/components/dashboard/conversation-history-dialog";
 import QuantAlphaIcon from "@/components/quant-alpha-icon";
 import MarkdownMessage from "@/components/markdown-message";
 import UsageUnlockModal from "@/components/usage-unlock-modal";
+import VoiceInput from "@/components/dashboard/voice-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   QuotaExhaustedError,
@@ -14,12 +16,33 @@ import {
   streamQuantAgent,
   type AgentSSE,
 } from "@/lib/api";
+import {
+  addMessage,
+  createConversation,
+  deleteConversation,
+  getMessages,
+  getUserConversations,
+  type ConversationPage,
+} from "@/lib/chatStorage";
 import { useUsageQuota } from "@/components/usage-quota-provider";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   getCommodityCategoryLabel,
   getCommodityMeta,
 } from "@/lib/commodities";
 import { getCryptoMarketMeta } from "@/lib/crypto";
+import type {
+  ChatEntry,
+  ChatMessage,
+  ChatAgentType,
+  DisplayAboutEntry,
+  ToolCallEntry,
+  ToolResultEntry,
+  DisplayChartEntry,
+  DisplayDownloadEntry,
+  DisplayMetricEntry,
+  ErrorEntry,
+} from "@/types/chat";
 import type {
   CommodityInstrumentSlug,
   CryptoInstrument,
@@ -31,79 +54,15 @@ import {
   ArrowUpRight,
   CheckCircle2,
   Download,
+  History,
   LayoutDashboard,
   Loader2,
+  LogIn,
+  LogOut,
   Send,
   Wrench,
   XCircle,
 } from "lucide-react";
-
-interface ToolCallEntry {
-  type: "tool_call";
-  name: string;
-  arguments: Record<string, unknown>;
-}
-
-interface ToolResultEntry {
-  type: "tool_result";
-  name: string;
-  success: boolean;
-  error?: string;
-}
-
-interface TextEntry {
-  type: "text";
-  content: string;
-}
-
-interface ErrorEntry {
-  type: "error";
-  message: string;
-}
-
-interface DisplayMetricEntry {
-  type: "display_metric";
-  metrics: { label: string; value: string }[];
-}
-
-interface DisplayChartEntry {
-  type: "display_chart";
-  symbol: string;
-  period: string;
-  points: { date: number; close: number }[];
-}
-
-interface DisplayDownloadEntry {
-  type: "display_download";
-  href: string;
-  label: string;
-  description: string;
-}
-
-interface DisplayAboutEntry {
-  type: "display_about";
-  href: string;
-  label: string;
-  description: string;
-  githubHref: string;
-  linkedinHref: string;
-}
-
-type ChatEntry =
-  | ToolCallEntry
-  | ToolResultEntry
-  | TextEntry
-  | ErrorEntry
-  | DisplayMetricEntry
-  | DisplayChartEntry
-  | DisplayDownloadEntry
-  | DisplayAboutEntry;
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-  entries?: ChatEntry[];
-}
 
 type AgentAccent = "blue" | "orange";
 type AgentIdentity = "alpha" | "quant";
@@ -132,6 +91,8 @@ interface AgentChatProps {
   renderDisplayEntriesInline?: boolean;
   prefillInput?: string | null;
   prefillNonce?: number;
+  onConversationLoaded?: (messages: ChatMessage[]) => void;
+  onConversationReset?: () => void;
 }
 
 const TICKER_SUGGESTIONS = [
@@ -271,8 +232,17 @@ export default function AgentChat({
   renderDisplayEntriesInline = true,
   prefillInput,
   prefillNonce,
+  onConversationLoaded,
+  onConversationReset,
 }: AgentChatProps) {
   const router = useRouter();
+  const {
+    user,
+    loading: authLoading,
+    openAuthModal,
+    signOut,
+    getIdToken,
+  } = useAuth();
   const {
     quota,
     loading: quotaLoading,
@@ -285,10 +255,19 @@ export default function AgentChat({
   const [streaming, setStreaming] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [prefillHighlight, setPrefillHighlight] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [historyItems, setHistoryItems] = useState<ConversationPage["items"]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyCursor, setHistoryCursor] = useState<ConversationPage["cursor"]>(null);
   const [mounted, setMounted] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
+  const conversationCreateRef = useRef<Promise<string | null> | null>(null);
   const lastAppliedPrefillKeyRef = useRef<string | null>(null);
   const prefillHighlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const accentClasses = getAccentClasses(accent);
@@ -304,6 +283,7 @@ export default function AgentChat({
   const commodityMeta = commodityInstrument
     ? getCommodityMeta(commodityInstrument)
     : null;
+  const agentType: ChatAgentType = isQuant ? "quant-alpha" : "alpha";
 
   useEffect(() => {
     setMounted(true);
@@ -342,6 +322,148 @@ export default function AgentChat({
     };
   }, []);
 
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
+
+  const loadConversationHistory = useCallback(async (reset: boolean) => {
+    if (!user) {
+      setHistoryItems([]);
+      setHistoryHasMore(false);
+      setHistoryCursor(null);
+      return;
+    }
+
+    setHistoryLoading(true);
+    try {
+      const page = await getUserConversations(
+        user.uid,
+        agentType,
+        reset ? null : historyCursor,
+      );
+      setHistoryItems((current) => (reset ? page.items : [...current, ...page.items]));
+      setHistoryHasMore(page.hasMore);
+      setHistoryCursor(page.cursor);
+    } catch (error) {
+      console.error("Failed to load conversations", error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [agentType, historyCursor, user]);
+
+  useEffect(() => {
+    conversationCreateRef.current = null;
+    conversationIdRef.current = null;
+    setConversationId(null);
+    if (!user) {
+      setHistoryItems([]);
+      setHistoryHasMore(false);
+      setHistoryCursor(null);
+      setHistoryOpen(false);
+      return;
+    }
+
+    void loadConversationHistory(true);
+  }, [loadConversationHistory, user, user?.uid]);
+
+  function runInBackground<T>(promise: Promise<T>, label: string) {
+    void promise.catch((error) => {
+      console.error(label, error);
+    });
+  }
+
+  const ensureConversation = useCallback(async (firstMessage: string) => {
+    if (!user) {
+      return null;
+    }
+
+    if (conversationIdRef.current) {
+      return conversationIdRef.current;
+    }
+
+    if (conversationCreateRef.current) {
+      return conversationCreateRef.current;
+    }
+
+    const creation = createConversation(user.uid, agentType, firstMessage)
+      .then((nextConversationId) => {
+        conversationIdRef.current = nextConversationId;
+        setConversationId(nextConversationId);
+        runInBackground(loadConversationHistory(true), "Failed to refresh conversation history");
+        return nextConversationId;
+      })
+      .catch((error) => {
+        console.error("Failed to create conversation", error);
+        return null;
+      })
+      .finally(() => {
+        conversationCreateRef.current = null;
+      });
+
+    conversationCreateRef.current = creation;
+    return creation;
+  }, [agentType, loadConversationHistory, user]);
+
+  function persistMessage(nextMessage: ChatMessage, firstUserMessage: string) {
+    if (!user) {
+      return;
+    }
+
+    runInBackground(
+      ensureConversation(firstUserMessage).then(async (nextConversationId) => {
+        if (!nextConversationId) {
+          return;
+        }
+
+        await addMessage(nextConversationId, nextMessage);
+        await loadConversationHistory(true);
+      }),
+      "Failed to persist chat message",
+    );
+  }
+
+  async function handleLoadConversation(nextConversationId: string) {
+    try {
+      const persistedMessages = await getMessages(nextConversationId);
+      setMessages(persistedMessages);
+      setConversationId(nextConversationId);
+      conversationIdRef.current = nextConversationId;
+      setHistoryOpen(false);
+      setInput("");
+      onConversationLoaded?.(persistedMessages);
+      scrollToBottom();
+    } catch (error) {
+      console.error("Failed to load conversation", error);
+    }
+  }
+
+  function handleResetConversation() {
+    setMessages([]);
+    setInput("");
+    setConversationId(null);
+    conversationIdRef.current = null;
+    conversationCreateRef.current = null;
+    setHistoryOpen(false);
+    onConversationReset?.();
+  }
+
+  async function handleDeleteConversation(targetConversationId: string) {
+    if (!window.confirm("Delete this conversation?")) {
+      return;
+    }
+
+    try {
+      await deleteConversation(targetConversationId);
+      setHistoryItems((current) => current.filter((item) => item.id !== targetConversationId));
+      if (conversationIdRef.current === targetConversationId) {
+        handleResetConversation();
+      }
+      runInBackground(loadConversationHistory(true), "Failed to refresh conversation history");
+    } catch (error) {
+      console.error("Failed to delete conversation", error);
+    }
+  }
+
   function scrollToBottom() {
     requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({
@@ -354,7 +476,14 @@ export default function AgentChat({
   async function handleSend(query: string) {
     const trimmedQuery = query.trim();
     if (!trimmedQuery || streaming) return;
-    if (!quotaLoading && !quotaUnavailable && quota != null && quota.remaining <= 0) {
+    setVoiceError(null);
+    const shouldBlockOnClientQuota =
+      !quotaLoading &&
+      !quotaUnavailable &&
+      quota != null &&
+      quota.remaining <= 0 &&
+      (!user || quota.limit >= 20);
+    if (shouldBlockOnClientQuota) {
       sendGAEvent("event", "agent_request_failed", {
         reason: "quota_exceeded",
       });
@@ -365,12 +494,14 @@ export default function AgentChat({
     sendGAEvent("event", "agent_request_started");
     setStreaming(true);
 
+    const authToken = user ? await getIdToken() : null;
     const entries: ChatEntry[] = [];
     const controller = new AbortController();
     abortRef.current = controller;
     let requestAccepted = false;
     let runningText = "";
     let requestFailed = false;
+    let assistantCompleted = false;
 
     try {
       const stream =
@@ -386,6 +517,10 @@ export default function AgentChat({
                     { role: "user", content: trimmedQuery },
                     { role: "assistant", content: "", entries: [] },
                   ]);
+                  persistMessage(
+                    { role: "user", content: trimmedQuery },
+                    trimmedQuery,
+                  );
                   setInput("");
                   if (remaining != null) {
                     setRemaining(remaining);
@@ -396,6 +531,7 @@ export default function AgentChat({
                   }
                   scrollToBottom();
                 },
+                authToken,
               },
             )
           : streamAgent(
@@ -424,6 +560,10 @@ export default function AgentChat({
                     { role: "user", content: trimmedQuery },
                     { role: "assistant", content: "", entries: [] },
                   ]);
+                  persistMessage(
+                    { role: "user", content: trimmedQuery },
+                    trimmedQuery,
+                  );
                   setInput("");
                   if (remaining != null) {
                     setRemaining(remaining);
@@ -434,6 +574,7 @@ export default function AgentChat({
                   }
                   scrollToBottom();
                 },
+                authToken,
               },
             );
 
@@ -442,6 +583,7 @@ export default function AgentChat({
           onEvent?.(sse);
         }
         if (sse.event === "done") {
+          assistantCompleted = true;
           if (requestAccepted && !requestFailed) {
             sendGAEvent("event", "agent_request_completed");
           }
@@ -487,6 +629,17 @@ export default function AgentChat({
           return updated;
         });
         scrollToBottom();
+      }
+
+      if (requestAccepted && assistantCompleted && !requestFailed) {
+        persistMessage(
+          {
+            role: "assistant",
+            content: runningText,
+            entries: [...entries],
+          },
+          trimmedQuery,
+        );
       }
     } catch (err) {
       if (err instanceof QuotaExhaustedError) {
@@ -537,6 +690,16 @@ export default function AgentChat({
 
   function handleStop() {
     abortRef.current?.abort();
+  }
+
+  async function handleVoiceTranscription(text: string) {
+    const transcript = text.trim();
+    if (!transcript) {
+      return;
+    }
+
+    setInput(transcript);
+    await handleSend(transcript);
   }
 
   const suggestions = ticker
@@ -610,6 +773,8 @@ export default function AgentChat({
   const resolvedAgentName =
     agentName ??
     (dataAssistant ? "Data assistant" : isQuant ? "Quant Alpha" : "Alpha");
+  const canShowHistory = !isLanding && Boolean(user);
+  const shouldShowAuthPrompt = !authLoading && !user;
   const headerDescription = headerDescriptionOverride ??
     (dataAssistant
       ? "Describe your project and what data you need. Alpha will do it for you."
@@ -622,6 +787,32 @@ export default function AgentChat({
       : macroCountry
       ? `Ask about ${macroCountry === "fr" ? "France" : "U.S."} macro data. Alpha will use the dashboard context before answering.`
       : `Ask about ${ticker}. Alpha will pull live data before answering.`);
+  const headerActionButtons = (
+    <>
+      {canShowHistory ? (
+        <button
+          type="button"
+          onClick={() => setHistoryOpen(true)}
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-[10px] border border-black/[0.08] bg-white px-3 text-sm text-black/62 transition-colors hover:bg-[#f7fbff] hover:text-[#161616]"
+        >
+          <History className="h-4 w-4" />
+          History
+        </button>
+      ) : null}
+      {canShowHistory ? (
+        <button
+          type="button"
+          onClick={() => {
+            void signOut();
+          }}
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-[10px] border border-black/[0.08] bg-white px-3 text-sm text-black/62 transition-colors hover:bg-[#f7fbff] hover:text-[#161616]"
+        >
+          <LogOut className="h-4 w-4" />
+          Sign out
+        </button>
+      ) : null}
+    </>
+  );
 
   return (
     <Card
@@ -698,21 +889,33 @@ export default function AgentChat({
               {headerRightContent ? (
                 <div className="flex flex-wrap items-center gap-2">
                   {headerRightContent}
+                  {headerActionButtons}
+                </div>
+              ) : canShowHistory ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {headerActionButtons}
                 </div>
               ) : null}
             </div>
           ) : (
-            <div className="space-y-1.5">
-              <CardTitle className="flex items-center gap-2 text-[#161616]">
-                {renderAgentIcon(agentIdentity, "light", "h-[1.75rem] w-[1.75rem]")}
-                <span className={isQuant ? accentClasses.titleAccent : undefined}>
-                  {resolvedAgentName}
-                </span>
-              </CardTitle>
-              {headerDescription ? (
-                <p className={cn("text-sm font-light", accentClasses.subtleText)}>
-                  {headerDescription}
-                </p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1.5">
+                <CardTitle className="flex items-center gap-2 text-[#161616]">
+                  {renderAgentIcon(agentIdentity, "light", "h-[1.75rem] w-[1.75rem]")}
+                  <span className={isQuant ? accentClasses.titleAccent : undefined}>
+                    {resolvedAgentName}
+                  </span>
+                </CardTitle>
+                {headerDescription ? (
+                  <p className={cn("text-sm font-light", accentClasses.subtleText)}>
+                    {headerDescription}
+                  </p>
+                ) : null}
+              </div>
+              {canShowHistory ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  {headerActionButtons}
+                </div>
               ) : null}
             </div>
           )}
@@ -850,7 +1053,12 @@ export default function AgentChat({
                   ref={inputRef}
                   type="text"
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    if (voiceError) {
+                      setVoiceError(null);
+                    }
+                  }}
                   autoFocus={autoFocusInput}
                   placeholder={resolvedPlaceholder}
                   disabled={streaming}
@@ -881,13 +1089,24 @@ export default function AgentChat({
                   ref={inputRef}
                   type="text"
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    if (voiceError) {
+                      setVoiceError(null);
+                    }
+                  }}
                   autoFocus={autoFocusInput}
                   placeholder={resolvedPlaceholder}
                   disabled={streaming}
                   className="h-10 w-full rounded-[12px] border-0 bg-transparent px-4 text-sm text-[#161616] outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
                 />
               </div>
+              <VoiceInput
+                accent={accent}
+                disabled={streaming}
+                onTranscription={handleVoiceTranscription}
+                onError={setVoiceError}
+              />
               <button
                 type="submit"
                 aria-disabled={!input.trim() || undefined}
@@ -907,7 +1126,52 @@ export default function AgentChat({
             </>
           )}
         </form>
+        {voiceError ? (
+          <p
+            className={cn(
+              "shrink-0 text-xs font-medium",
+              accent === "orange" ? "text-[#b85a15]" : "text-[#0b63c7]",
+            )}
+          >
+            {voiceError}
+          </p>
+        ) : null}
+        {shouldShowAuthPrompt ? (
+          <button
+            type="button"
+            onClick={openAuthModal}
+            className={cn(
+              "shrink-0 self-start text-xs font-medium transition-colors",
+              accent === "orange"
+                ? "text-[#c85f14] hover:text-[#a85010]"
+                : "text-[#0b63c7] hover:text-[#0850a3]",
+            )}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <LogIn className="h-3.5 w-3.5" />
+              Sign in for 10 extra requests and saved conversations.
+            </span>
+          </button>
+        ) : null}
       </CardContent>
+      <ConversationHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        conversations={historyItems}
+        currentConversationId={conversationId}
+        loading={historyLoading}
+        hasMore={historyHasMore}
+        onLoadConversation={(targetConversationId) => {
+          void handleLoadConversation(targetConversationId);
+        }}
+        onDeleteConversation={(targetConversationId) => {
+          void handleDeleteConversation(targetConversationId);
+        }}
+        onNewConversation={handleResetConversation}
+        onLoadMore={() => {
+          void loadConversationHistory(false);
+        }}
+      />
       <UsageUnlockModal
         open={unlockOpen}
         remaining={quota?.remaining ?? 0}
@@ -971,6 +1235,30 @@ function sseToEntry(sse: AgentSSE): ChatEntry | null {
         linkedinHref:
           (sse.data.linkedin_href as string) ??
           "https://www.linkedin.com/in/mathis-villaret",
+      };
+    case "display_quant_chain":
+      return {
+        type: "display_quant_chain",
+        chain: sse.data.chain as import("@/types/api").QuantOptionChain,
+      };
+    case "display_quant_greeks":
+      return {
+        type: "display_quant_greeks",
+        result: sse.data.result as import("@/types/api").QuantGreeksResult,
+        preferredMetric:
+          typeof sse.data.preferred_metric === "string"
+            ? (sse.data.preferred_metric as import("@/types/api").QuantGreeksMetric)
+            : undefined,
+      };
+    case "display_quant_surface":
+      return {
+        type: "display_quant_surface",
+        surface: sse.data.surface as import("@/types/api").QuantSurfaceResult,
+      };
+    case "display_quant_payoff":
+      return {
+        type: "display_quant_payoff",
+        payoff: sse.data.payoff as import("@/types/api").QuantPayoffResult,
       };
     case "error":
       return {

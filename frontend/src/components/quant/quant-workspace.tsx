@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { sendGAEvent } from "@next/third-parties/google";
 import {
   ArrowLeft,
@@ -16,9 +16,9 @@ import {
 import AgentChat from "@/components/dashboard/agent-chat";
 import QuantSurfacePlot from "@/components/quant/quant-surface-plot";
 import RequestQuotaBadge from "@/components/request-quota-badge";
-import { Badge } from "@/components/ui/badge";
 import type { AgentSSE } from "@/lib/api";
 import { computeBlackScholes } from "@/lib/quant/black-scholes";
+import type { ChatEntry, ChatMessage } from "@/types/chat";
 import type {
   QuantGreeksMetric,
   QuantGreeksResult,
@@ -298,6 +298,44 @@ function createDisplayItem(event: AgentSSE): QuantDisplayItem | null {
   }
 }
 
+function createDisplayItemFromEntry(
+  entry: ChatEntry,
+  id: string,
+): QuantDisplayItem | null {
+  switch (entry.type) {
+    case "display_quant_chain":
+      return { id, type: entry.type, chain: entry.chain };
+    case "display_quant_greeks":
+      return {
+        id,
+        type: entry.type,
+        result: entry.result,
+        preferredMetric: entry.preferredMetric,
+      };
+    case "display_quant_surface":
+      return { id, type: entry.type, surface: entry.surface };
+    case "display_quant_payoff":
+      return { id, type: entry.type, payoff: entry.payoff };
+    default:
+      return null;
+  }
+}
+
+function buildDisplayItemsFromMessages(messages: ChatMessage[]): QuantDisplayItem[] {
+  const collected: QuantDisplayItem[] = [];
+
+  messages.forEach((message, messageIndex) => {
+    message.entries?.forEach((entry, entryIndex) => {
+      const item = createDisplayItemFromEntry(entry, `history-${messageIndex}-${entryIndex}`);
+      if (item) {
+        collected.push(item);
+      }
+    });
+  });
+
+  return collected.reverse();
+}
+
 export default function QuantWorkspace() {
   const [displayItems, setDisplayItems] = useState<QuantDisplayItem[]>([]);
   const [prefillInput, setPrefillInput] = useState<string | null>(null);
@@ -374,6 +412,14 @@ export default function QuantWorkspace() {
         prefillInput={prefillInput}
         prefillNonce={prefillNonce}
         onEvent={handleAgentEvent}
+        onConversationLoaded={(messages) => {
+          setDisplayItems(buildDisplayItemsFromMessages(messages));
+        }}
+        onConversationReset={() => {
+          setDisplayItems([]);
+          setPrefillInput(null);
+          setPrefillNonce((value) => value + 1);
+        }}
       />
     </div>
   );
@@ -623,6 +669,24 @@ function QuantGreeksBlock({
   result: QuantGreeksResult;
   preferredMetric?: QuantGreeksMetric;
 }) {
+  const resetKey = `${result.symbol ?? "custom"}:${result.strike}:${result.expiration ?? ""}:${preferredMetric ?? "delta"}`;
+
+  return (
+    <QuantGreeksBlockInner
+      key={resetKey}
+      result={result}
+      preferredMetric={preferredMetric}
+    />
+  );
+}
+
+function QuantGreeksBlockInner({
+  result,
+  preferredMetric,
+}: {
+  result: QuantGreeksResult;
+  preferredMetric?: QuantGreeksMetric;
+}) {
   const [selectedMetric, setSelectedMetric] = useState<QuantGreeksMetric>(
     preferredMetric ?? "delta",
   );
@@ -641,20 +705,6 @@ function QuantGreeksBlock({
   );
   const [daysToExpiry, setDaysToExpiry] = useState(defaultDaysToExpiry);
   const maturityLabels = getMaturitySliderLabels(minDaysToExpiry, maxDaysToExpiry);
-
-  useEffect(() => {
-    setSelectedMetric(preferredMetric ?? "delta");
-  }, [preferredMetric, result.symbol, result.strike, result.expiration]);
-
-  useEffect(() => {
-    setDaysToExpiry(defaultDaysToExpiry);
-  }, [
-    baseDaysToExpiry,
-    defaultDaysToExpiry,
-    result.symbol,
-    result.strike,
-    result.expiration,
-  ]);
 
   return (
     <section className="rounded-[18px] border border-[#E8701A]/12 bg-white p-5 shadow-[0_18px_34px_-30px_rgba(232,112,26,0.35)]">

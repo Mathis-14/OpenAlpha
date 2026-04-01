@@ -13,6 +13,7 @@ import {
   FileSearch,
   Globe,
   LogIn,
+  LogOut,
   PackageSearch,
   Search,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import MacroSearch from "@/components/macro-search";
 import AgentChat from "@/components/dashboard/agent-chat";
 import QuantAlphaIcon from "@/components/quant-alpha-icon";
 import RequestQuotaBadge from "@/components/request-quota-badge";
+import { useAuth } from "@/contexts/AuthContext";
 
 const FEATURE_CARDS = [
   {
@@ -50,6 +52,7 @@ const FEATURE_CARDS = [
 
 export default function LandingPage() {
   const router = useRouter();
+  const { user, openAuthModal, signOut } = useAuth();
   const [showAgent, setShowAgent] = useState(false);
   const [showBrowse, setShowBrowse] = useState(false);
   const [browseMode, setBrowseMode] = useState<"stocks" | "commodities" | "macro" | "crypto">("stocks");
@@ -275,15 +278,27 @@ export default function LandingPage() {
             <QuantAlphaIcon className="h-4 w-4" />
             Quant Alpha
           </Link>
-          <button
-            type="button"
-            disabled
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-[10px] border border-black/[0.08] bg-white/92 px-3.5 text-sm text-black/62 shadow-[0_16px_30px_-24px_rgba(0,0,0,0.14)] backdrop-blur-sm"
-          >
-            <LogIn className="h-4 w-4" />
-            Login
-            <span className="text-black/44">(coming soon)</span>
-          </button>
+          {user ? (
+            <button
+              type="button"
+              onClick={() => {
+                void signOut();
+              }}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-[10px] border border-black/[0.08] bg-white/92 px-3.5 text-sm text-black/62 shadow-[0_16px_30px_-24px_rgba(0,0,0,0.14)] backdrop-blur-sm transition-colors hover:bg-[#f7fbff] hover:text-[#161616]"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={openAuthModal}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-[10px] border border-black/[0.08] bg-white/92 px-3.5 text-sm text-black/62 shadow-[0_16px_30px_-24px_rgba(0,0,0,0.14)] backdrop-blur-sm transition-colors hover:bg-[#f7fbff] hover:text-[#161616]"
+            >
+              <LogIn className="h-4 w-4" />
+              Login
+            </button>
+          )}
         </div>
 
         <section className="flex w-full max-w-[960px] flex-col items-center gap-4">

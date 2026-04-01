@@ -17,7 +17,7 @@ export async function GET(request: Request): Promise<Response> {
     const headers = new Headers({
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
-      Vary: "Cookie",
+      Vary: "Cookie, Authorization",
     });
     appendSetCookies(headers, snapshot.setCookieHeaders);
 
