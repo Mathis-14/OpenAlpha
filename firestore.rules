@@ -4,17 +4,45 @@ service cloud.firestore {
   match /databases/{database}/documents {
     match /conversations/{conversationId} {
       allow create: if request.auth != null
+                    && request.resource.data.keys().hasOnly([
+                      'userId',
+                      'agentType',
+                      'title',
+                      'createdAt',
+                      'updatedAt',
+                      'messageCount'
+                    ])
                     && request.resource.data.userId == request.auth.uid;
 
-      allow read, update, delete: if request.auth != null
-                                  && resource.data.userId == request.auth.uid;
+      allow read, delete: if request.auth != null
+                          && resource.data.userId == request.auth.uid;
+
+      allow update: if request.auth != null
+                    && resource.data.userId == request.auth.uid
+                    && request.resource.data.keys().hasOnly([
+                      'userId',
+                      'agentType',
+                      'title',
+                      'createdAt',
+                      'updatedAt',
+                      'messageCount'
+                    ])
+                    && request.resource.data.userId == resource.data.userId
+                    && request.resource.data.agentType == resource.data.agentType
+                    && request.resource.data.createdAt == resource.data.createdAt;
 
       match /messages/{messageId} {
         allow create: if request.auth != null
+                      && request.resource.data.keys().hasOnly([
+                        'role',
+                        'content',
+                        'entries',
+                        'createdAt'
+                      ])
                       && get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid;
 
-        allow read, update, delete: if request.auth != null
-                                    && get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid;
+        allow read, delete: if request.auth != null
+                            && get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid;
       }
     }
   }
