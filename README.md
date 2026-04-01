@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Open-source financial intelligence</strong><br/>
-  Live dashboards, CSV data export, and an AI agent grounded in market data.
+  Live dashboards, options analytics, CSV data export, and AI agents grounded in market data.
 </p>
 
 <p align="center">
@@ -55,8 +55,10 @@ OpenAlpha provides you a fully configured agent. You can with its help or not:
 - Browse curated commodity dashboards across metals, energy, agriculture, and benchmark series
 - Explore macro dashboards for the United States and France
 - Browse crypto dashboards for BTC and ETH perpetuals
+- Use **Quant Alpha** for U.S. equity options chains, Greeks, payoff diagrams, and volatility surfaces
 - Export raw CSV time series from the dedicated **Get the data** workspace
-- Use an AI agent that stays grounded in the current dashboard or data workflow
+- Use AI agents that stay grounded in the current dashboard or workflow
+- Send prompts by text or by voice with server-side Voxtral transcription
 
 ### At a glance
 
@@ -66,14 +68,16 @@ OpenAlpha provides you a fully configured agent. You can with its help or not:
 | Macro          | U.S. and France dashboards with country-aware context                       |
 | Commodities    | Curated dashboards across metals, energy, agriculture, and benchmark series |
 | Crypto         | BTC and ETH perpetual dashboards backed by Deribit                          |
+| Quant Alpha    | U.S. equity options analytics with chains, Greeks, payoff diagrams, and IV surfaces |
 | Data retrieval | Raw CSV export with a dedicated planning assistant                          |
+| Voice input    | Optional microphone input on Alpha and Quant Alpha with Voxtral transcription |
 
 ![OpenAlpha stock dashboard](./README.assets/stock-dashboard.png)
 <p align="center"><em>Stock dashboard with live market context and grounded agent workflow.</em></p>
 
 ## Agentic workflow
 
-OpenAlpha uses a **tool-based agentic workflow**.
+OpenAlpha uses **tool-based agentic workflows** for both **Alpha** and **Quant Alpha**.
 
 The agent stack is intentionally simple and explicit:
 
@@ -89,13 +93,14 @@ When you ask Alpha a question, the model does not answer from memory first. The 
 
 ### How it works
 
-1. The user sends a prompt from a dashboard or from the **Get the data** workspace.
-2. `POST /api/agent` validates the request, applies the request quota, and normalizes the available context:
+1. The user sends a prompt by text or voice from a dashboard, from **Get the data**, or from the **Quant Alpha** workspace.
+2. `POST /api/agent` or `POST /api/quant-agent` validates the request, applies the request quota, and normalizes the available context:
    - stock ticker
    - macro country
    - commodity instrument
    - crypto instrument
    - data-planning mode
+   - quant options context
 3. The server builds a context-aware user message in `buildUserContent(...)`.
    - Example: on a commodity page, the prompt is augmented so the model knows it must stay grounded in that exact commodity dashboard.
 4. The server sends the conversation to Mistral with:
@@ -130,6 +135,7 @@ When you ask Alpha a question, the model does not answer from memory first. The 
 - **Display side-channel**: tools can emit UI artifacts such as `display_metric`, `display_chart`, and `display_download`
 - **Hard allowlist**: only declared server-side tools are callable
 - **Quota gating** on agent requests before model execution
+- **Voice input** through browser recording plus a server-side Voxtral transcription route
 
 ### Libraries and implementation choices
 
@@ -153,6 +159,7 @@ Current context-aware behavior:
 - **Commodity dashboard**: Alpha uses commodity overview and price-history tools for the current instrument
 - **Crypto dashboard**: Alpha uses Deribit-backed crypto overview and price-history tools for the current perpetual
 - **Get the data**: Alpha acts as a data assistant and maps one project to one supported export at a time
+- **Quant Alpha**: Quant Alpha uses option-chain, Greeks, payoff, and volatility-surface tools for the selected U.S. equity
 
 The agent can also suggest handoffs:
 
@@ -171,12 +178,26 @@ The agent can also suggest handoffs:
 - **Commodities**: curated commodity dashboards with charts and agent support
 - **Crypto**: BTC and ETH perpetual dashboards backed by Deribit public market data
 
+### Quant Alpha
+
+- dedicated options workspace at `/quant`
+- U.S. equity options only
+- live option-chain snapshots from Yahoo Finance
+- Black-Scholes Greeks and higher-order Greeks
+- payoff diagrams for multi-leg structures
+- SSVI-based implied-volatility surfaces
+- dedicated **Quant Alpha** agent with a split chat + analytics display surface
+
+![Quant Alpha workspace](./README.assets/quant-alpha-workspace.png)
+<p align="center"><em>Quant Alpha workspace with the options agent, analytics display surface, and quick-pick flows.</em></p>
+
 ### Project status
 
 - **Active runtime**: Next.js single-deploy application in `frontend/`
 - **Legacy/reference code**: FastAPI backend in `backend/`
 - **Deployment target**: Vercel
 - **Current crypto scope**: BTC and ETH perpetuals only
+- **Current quant scope**: U.S. equity options only
 
 ### Data retrieval
 
@@ -195,6 +216,13 @@ The agent can also suggest handoffs:
 - when the quota is exhausted, a password unlock modal can add more requests
 - production quota enforcement is designed to run server-side with Upstash Redis
 - `QUOTA_ENABLED=false` forces the legacy cookie quota path for that deployment
+
+### Voice input
+
+- every shared agent window supports typed prompts and microphone input
+- browser audio is recorded locally, then transcribed server-side with Voxtral
+- the resulting transcript is injected into the normal agent flow
+- supported on both **Alpha** and **Quant Alpha**
 
 ![OpenAlpha macro dashboard](./README.assets/macro-dashboard.png)
 <p align="center"><em>Macro dashboard with country-aware context and live series exploration.</em></p>
@@ -288,7 +316,7 @@ npm run build
 
 ## Next implementations
 
-These are the two next product surfaces planned for OpenAlpha after the current dashboards and data workflow.
+This is the next product surface planned for OpenAlpha after the current dashboards, Quant Alpha, and data workflow.
 
 ### Equity analysis
 
@@ -299,16 +327,7 @@ This upcoming surface is intended to focus on **equity reports and AI-assisted d
 - use AI to extract the important signal from long-form company materials faster
 - stay focused on document-based research assistance rather than full valuation tooling
 
-### Quantitative tools
-
-This upcoming surface is intended to focus on **options analytics and volatility workflows**:
-
-- compute core option Greeks
-- explore implied volatility and volatility surfaces
-- evaluate payoff and scenario behavior for options positions
-- provide practical derivatives analysis tools without turning into a full quant research lab
-
-These are planned next implementations, not active product surfaces in the current runtime yet.
+This is planned next work, not an active product surface in the current runtime yet.
 
 ## Notes for contributors
 
