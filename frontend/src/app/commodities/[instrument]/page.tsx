@@ -130,41 +130,40 @@ export default async function CommodityInstrumentPage({
   ) : null;
 
   const detailsWidget = overview ? (
-    <Card
-      key="commodity-details"
-      className="rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]"
-    >
-      <CardHeader>
-        <CardTitle className="text-[#161616]">Instrument details</CardTitle>
-      </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-        <DetailStat label="Benchmark" value={marketMeta.name} />
-        <DetailStat
-          label="Category"
-          value={getCommodityCategoryLabel(marketMeta.category)}
-        />
-        <DetailStat label="Unit" value={marketMeta.unit_label} />
-        <DetailStat label="Exchange" value={overview.exchange_label} />
-        <DetailStat label="Source" value={overview.source_label} />
-        <DetailStat label="Provider symbol" value={overview.provider_symbol} />
-        <DetailStat
-          label="Session range"
-          value={`${formatValue(overview.day_low)} - ${formatValue(overview.day_high)}`}
-        />
-        <DetailStat
-          label="52W range"
-          value={`${formatValue(overview.fifty_two_week_low)} - ${formatValue(overview.fifty_two_week_high)}`}
-        />
-        <DetailStat
-          label="Market state"
-          value={overview.market_state ?? "—"}
-        />
-      </CardContent>
-    </Card>
+    <div key="commodity-details" className="h-[560px] min-h-0">
+      <Card className="flex h-full flex-col rounded-[16px] border border-black/[0.08] bg-white shadow-[0_24px_48px_-38px_rgba(0,0,0,0.08)]">
+        <CardHeader>
+          <CardTitle className="text-[#161616]">Instrument details</CardTitle>
+        </CardHeader>
+        <CardContent className="grid flex-1 grid-cols-1 gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <DetailStat label="Benchmark" value={marketMeta.name} />
+          <DetailStat
+            label="Category"
+            value={getCommodityCategoryLabel(marketMeta.category)}
+          />
+          <DetailStat label="Unit" value={marketMeta.unit_label} />
+          <DetailStat label="Exchange" value={overview.exchange_label} />
+          <DetailStat label="Source" value={overview.source_label} />
+          <DetailStat label="Provider symbol" value={overview.provider_symbol} />
+          <DetailStat
+            label="Session range"
+            value={`${formatValue(overview.day_low)} - ${formatValue(overview.day_high)}`}
+          />
+          <DetailStat
+            label="52W range"
+            value={`${formatValue(overview.fifty_two_week_low)} - ${formatValue(overview.fifty_two_week_high)}`}
+          />
+          <DetailStat
+            label="Market state"
+            value={overview.market_state ?? "—"}
+          />
+        </CardContent>
+      </Card>
+    </div>
   ) : null;
 
   const newsWidget = (
-    <div className="h-[520px] min-h-0">
+    <div className="h-[560px] min-h-0">
       <NewsFeed
         articles={[]}
         fillHeight
@@ -243,7 +242,7 @@ export default async function CommodityInstrumentPage({
           chartWidget={chartWidget}
           bottomLeftWidgets={detailsWidget}
           bottomRightWidgets={newsWidget}
-          splitBottomColumns="equal"
+          splitBottomColumns="news-heavy"
           agentPanel={
             <AgentChat
               key={`commodity-agent-${instrument}`}

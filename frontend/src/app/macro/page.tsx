@@ -182,7 +182,7 @@ export default async function MacroPage({
   );
 
   const bottomWidgets = (
-    <div className="h-[520px] min-h-0">
+    <div className="h-[560px] min-h-0">
       <NewsFeed
         articles={[]}
         fillHeight
@@ -254,7 +254,6 @@ export default async function MacroPage({
         <DashboardLayout
           topWidgets={topWidgets}
           chartWidget={chartWidget}
-          bottomWidgets={bottomWidgets}
           agentPanel={
             <AgentChat
               key={`macro-agent-${country}`}
@@ -263,6 +262,7 @@ export default async function MacroPage({
             />
           }
         />
+        <div className="mt-6">{bottomWidgets}</div>
       </main>
     </div>
   );
