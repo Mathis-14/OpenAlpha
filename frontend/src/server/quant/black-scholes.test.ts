@@ -29,3 +29,13 @@ test("computeBlackScholes produces sensible signs for put Greeks", () => {
   assert.ok(result.theta < 0);
   assert.ok(result.rho < 0);
 });
+
+test("computeBlackScholes reflects continuous dividend yield in equity-style inputs", () => {
+  const noDividend = computeBlackScholes("call", 100, 100, 1, 0.2, 0.05, 0);
+  const withDividend = computeBlackScholes("call", 100, 100, 1, 0.2, 0.05, 0.02);
+
+  assert.ok(withDividend.theoreticalPrice < noDividend.theoreticalPrice);
+  assert.ok(withDividend.delta < noDividend.delta);
+  assert.ok(withDividend.gamma > 0);
+  assert.ok(withDividend.vega > 0);
+});
