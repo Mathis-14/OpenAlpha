@@ -18,10 +18,13 @@ import QuantSurfacePlot from "@/components/quant/quant-surface-plot";
 import RequestQuotaBadge from "@/components/request-quota-badge";
 import type { AgentSSE } from "@/lib/api";
 import { computeBlackScholes } from "@/lib/quant/black-scholes";
+import { deriveActiveTenor } from "@/lib/quant/greeks-context";
 import type { ChatEntry, ChatMessage } from "@/types/chat";
 import type {
+  QuantGreeksActiveTenor,
   QuantGreeksMetric,
   QuantGreeksResult,
+  QuantGreeksTermNode,
   QuantOptionChain,
   QuantOptionContract,
   QuantPayoffResult,
@@ -210,22 +213,29 @@ function getMetricValue(
   result: QuantGreeksResult,
   metric: QuantGreeksMetric,
   spot: number,
-  timeToExpiryYears: number,
+  inputs: {
+    timeToExpiryYears: number;
+    volatility: number;
+    riskFreeRate: number;
+    dividendYield: number;
+    premiumReference: number;
+  },
 ): number {
   const greeks = computeBlackScholes(
     result.option_type,
     spot,
     result.strike,
-    timeToExpiryYears,
-    result.volatility,
-    result.risk_free_rate,
+    inputs.timeToExpiryYears,
+    inputs.volatility,
+    inputs.riskFreeRate,
+    inputs.dividendYield,
   );
 
   switch (metric) {
     case "price":
       return greeks.theoreticalPrice;
     case "payoff":
-      return getIntrinsicValue(result, spot) - result.theoretical_price;
+      return getIntrinsicValue(result, spot) - inputs.premiumReference;
     case "delta":
       return greeks.delta;
     case "gamma":
@@ -248,7 +258,13 @@ function getMetricValue(
 function buildGreeksProfile(
   result: QuantGreeksResult,
   metric: QuantGreeksMetric,
-  timeToExpiryYears: number,
+  inputs: {
+    timeToExpiryYears: number;
+    volatility: number;
+    riskFreeRate: number;
+    dividendYield: number;
+    premiumReference: number;
+  },
 ): Array<{ spot: number; value: number }> {
   const lowerAnchor = Math.min(result.spot_price, result.strike);
   const upperAnchor = Math.max(result.spot_price, result.strike);
@@ -260,9 +276,69 @@ function buildGreeksProfile(
     const spot = start + ((end - start) * index) / steps;
     return {
       spot: Number(spot.toFixed(4)),
-      value: getMetricValue(result, metric, spot, timeToExpiryYears),
+      value: getMetricValue(result, metric, spot, inputs),
     };
   });
+}
+
+type ClientTenorContext = QuantGreeksActiveTenor & {
+  volatility: number;
+  riskFreeRate: number;
+  dividendYield: number;
+};
+
+function resolveClientTenorContext(
+  result: QuantGreeksResult,
+  targetDaysToExpiry: number,
+): ClientTenorContext {
+  const derived =
+    result.maturity_nodes && result.maturity_nodes.length > 0
+      ? deriveActiveTenor(result.maturity_nodes, targetDaysToExpiry)
+      : null;
+
+  if (derived) {
+    return derived;
+  }
+
+  return {
+    mode: result.active_tenor?.mode ?? "listed",
+    days_to_expiry:
+      result.active_tenor?.days_to_expiry ?? Math.max(1, Math.round(result.time_to_expiry_years * 365.25)),
+    time_to_expiry_years: result.active_tenor?.time_to_expiry_years ?? result.time_to_expiry_years,
+    expiration: result.active_tenor?.expiration ?? result.expiration,
+    lower_anchor: result.active_tenor?.lower_anchor,
+    upper_anchor: result.active_tenor?.upper_anchor,
+    clamped: result.active_tenor?.clamped,
+    volatility: result.volatility,
+    riskFreeRate: result.risk_free_rate,
+    dividendYield: result.dividend_yield ?? 0,
+  };
+}
+
+function formatExpiryContext(
+  activeTenor: ClientTenorContext,
+): string {
+  if (activeTenor.mode === "listed") {
+    return activeTenor.expiration ? formatDateLabel(activeTenor.expiration) : "Listed expiry";
+  }
+
+  if (activeTenor.lower_anchor && activeTenor.upper_anchor) {
+    return `${formatTenorFromDays(activeTenor.lower_anchor.days_to_expiry)} to ${formatTenorFromDays(activeTenor.upper_anchor.days_to_expiry)}`;
+  }
+
+  return "Interpolated tenor";
+}
+
+function getMaturityNodeLabels(nodes: QuantGreeksTermNode[]): string[] {
+  if (nodes.length === 0) {
+    return [];
+  }
+
+  const anchorDays = nodes.map((node) => node.days_to_expiry);
+  const candidates = [anchorDays[0], anchorDays[Math.floor(anchorDays.length / 2)], anchorDays[anchorDays.length - 1]]
+    .filter((value, index, values): value is number => value != null && values.indexOf(value) === index);
+
+  return candidates.map((days) => formatTenorFromDays(days));
 }
 
 function createDisplayItem(event: AgentSSE): QuantDisplayItem | null {
@@ -690,21 +766,51 @@ function QuantGreeksBlockInner({
   const [selectedMetric, setSelectedMetric] = useState<QuantGreeksMetric>(
     preferredMetric ?? "delta",
   );
-  const baseDaysToExpiry = Math.max(
-    1,
-    Math.round(result.time_to_expiry_years * 365.25),
-  );
-  const minDaysToExpiry = 1;
-  const maxDaysToExpiry = Math.max(
-    minDaysToExpiry,
-    result.maturity_range_days?.max ?? Math.max(365, Math.ceil(baseDaysToExpiry * 2)),
-  );
+  const listedNodes = result.maturity_nodes ?? [];
+  const baseDaysToExpiry =
+    result.active_tenor?.days_to_expiry ??
+    Math.max(1, Math.round(result.time_to_expiry_years * 365.25));
+  const minDaysToExpiry =
+    listedNodes[0]?.days_to_expiry ??
+    result.maturity_range_days?.min ??
+    baseDaysToExpiry;
+  const maxDaysToExpiry =
+    listedNodes[listedNodes.length - 1]?.days_to_expiry ??
+    result.maturity_range_days?.max ??
+    baseDaysToExpiry;
   const defaultDaysToExpiry = Math.min(
     maxDaysToExpiry,
-    Math.max(minDaysToExpiry, 2),
+    Math.max(minDaysToExpiry, baseDaysToExpiry),
   );
   const [daysToExpiry, setDaysToExpiry] = useState(defaultDaysToExpiry);
-  const maturityLabels = getMaturitySliderLabels(minDaysToExpiry, maxDaysToExpiry);
+  const activeTenor = useMemo(
+    () => resolveClientTenorContext(result, daysToExpiry),
+    [daysToExpiry, result],
+  );
+  const activeGreeks = useMemo(
+    () =>
+      computeBlackScholes(
+        result.option_type,
+        result.spot_price,
+        result.strike,
+        activeTenor.time_to_expiry_years,
+        activeTenor.volatility,
+        activeTenor.riskFreeRate,
+        activeTenor.dividendYield,
+      ),
+    [activeTenor, result.option_type, result.spot_price, result.strike],
+  );
+  const maturityLabels =
+    listedNodes.length > 0
+      ? getMaturityNodeLabels(listedNodes)
+      : getMaturitySliderLabels(minDaysToExpiry, maxDaysToExpiry);
+  const showMaturityControl = selectedMetric !== "payoff" && maxDaysToExpiry > minDaysToExpiry;
+  const titleTenorLabel =
+    activeTenor.mode === "listed"
+      ? activeTenor.expiration
+        ? formatDateLabel(activeTenor.expiration)
+        : formatTenorFromDays(activeTenor.days_to_expiry)
+      : `${formatTenorFromDays(activeTenor.days_to_expiry)} target tenor`;
 
   return (
     <section className="rounded-[18px] border border-[#E8701A]/12 bg-white p-5 shadow-[0_18px_34px_-30px_rgba(232,112,26,0.35)]">
@@ -712,31 +818,37 @@ function QuantGreeksBlockInner({
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Sigma className="h-4 w-4 text-[#E8701A]" />
-            <p className="text-sm font-medium text-[#161616]">Black-Scholes Greeks</p>
+            <p className="text-sm font-medium text-[#161616]">Chain-linked BSM Greeks</p>
           </div>
           <h3 className="text-[1.2rem] font-medium text-[#161616]">
             {(result.symbol ?? "Custom")}
             <span className="ml-2 text-black/44">
-              {result.option_type.toUpperCase()} {formatNumber(result.strike)} {result.expiration ?? ""}
+              {result.option_type.toUpperCase()} {formatNumber(result.strike)} {titleTenorLabel}
             </span>
           </h3>
         </div>
-        <InfoStat label="Theo price" value={formatNumber(result.theoretical_price, 4)} />
+        <InfoStat label="Theo price" value={formatNumber(activeGreeks.theoreticalPrice, 4)} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <InfoStat label="Delta" value={formatNumber(result.delta, 4)} />
-        <InfoStat label="Gamma" value={formatNumber(result.gamma, 6)} />
-        <InfoStat label="Vega / 1 vol pt" value={formatNumber(result.vega, 4)} />
-        <InfoStat label="Theta / day" value={formatNumber(result.theta, 4)} />
-        <InfoStat label="Rho / 1 rate pt" value={formatNumber(result.rho, 4)} />
-        <InfoStat label="Volga" value={formatNumber(result.volga, 4)} />
-        <InfoStat label="Vanna" value={formatNumber(result.vanna, 4)} />
-        <InfoStat label="Speed" value={formatNumber(result.speed, 6)} />
-        <InfoStat label="Volatility" value={formatPercent(result.volatility)} />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <InfoStat label="Delta" value={formatNumber(activeGreeks.delta, 4)} />
+        <InfoStat label="Gamma" value={formatNumber(activeGreeks.gamma, 6)} />
+        <InfoStat label="Vega / 1 vol pt" value={formatNumber(activeGreeks.vega, 4)} />
+        <InfoStat label="Theta / day" value={formatNumber(activeGreeks.theta, 4)} />
+        <InfoStat label="Rho / 1 rate pt" value={formatNumber(activeGreeks.rho, 4)} />
+        <InfoStat label="Volga" value={formatNumber(activeGreeks.volga, 4)} />
+        <InfoStat label="Vanna" value={formatNumber(activeGreeks.vanna, 4)} />
+        <InfoStat label="Speed" value={formatNumber(activeGreeks.speed, 6)} />
+        <InfoStat label="Volatility" value={formatPercent(activeTenor.volatility)} />
         <InfoStat label="Spot" value={formatNumber(result.spot_price)} />
-        <InfoStat label="Risk-free" value={formatPercent(result.risk_free_rate, 2)} />
-        <InfoStat label="TTE" value={formatTenorFromDays(baseDaysToExpiry)} />
+        <InfoStat label="Risk-free" value={formatPercent(activeTenor.riskFreeRate, 2)} />
+        <InfoStat label="Dividend yield" value={formatPercent(activeTenor.dividendYield, 2)} />
+        <InfoStat label="TTE" value={formatTenorFromDays(activeTenor.days_to_expiry)} />
+        <InfoStat
+          label="Tenor mode"
+          value={activeTenor.mode === "listed" ? "Listed expiry" : "Interpolated"}
+        />
+        <InfoStat label="Expiry context" value={formatExpiryContext(activeTenor)} />
       </div>
 
       <div className="mt-4 rounded-[14px] border border-[#E8701A]/10 bg-[#fff8f2] p-4">
@@ -746,7 +858,7 @@ function QuantGreeksBlockInner({
               Greeks visualization
             </p>
             <p className="text-sm text-black/58">
-              Explore how the selected metric changes across spot prices and maturity.
+              Explore how the selected metric changes across spot prices and real listed or interpolated tenor nodes.
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-2">
@@ -767,35 +879,61 @@ function QuantGreeksBlockInner({
           </div>
         </div>
 
-        <div className="mb-4 rounded-[14px] border border-[#E8701A]/10 bg-white p-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#c85f14]">
-              Maturity
-            </p>
-            <p className="text-sm text-black/64">
-              {formatTenorFromDays(daysToExpiry)}
-            </p>
+        {showMaturityControl ? (
+          <div className="mb-4 rounded-[14px] border border-[#E8701A]/10 bg-white p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#c85f14]">
+                Maturity
+              </p>
+              <p className="text-sm text-black/64">
+                {formatTenorFromDays(activeTenor.days_to_expiry)}
+                {activeTenor.mode === "interpolated" ? " (interpolated)" : ""}
+              </p>
+            </div>
+            <input
+              type="range"
+              min={minDaysToExpiry}
+              max={maxDaysToExpiry}
+              step={1}
+              value={daysToExpiry}
+              onChange={(event) => setDaysToExpiry(Number(event.target.value))}
+              className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[#f7e7d9] accent-[#E8701A]"
+            />
+            <div className="mt-2 flex flex-wrap justify-between gap-2 text-[11px] text-black/42">
+              {maturityLabels.map((label) => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+            {listedNodes.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {listedNodes.map((node) => (
+                  <button
+                    key={`${node.expiration}-${node.days_to_expiry}`}
+                    type="button"
+                    onClick={() => setDaysToExpiry(node.days_to_expiry)}
+                    className={
+                      node.days_to_expiry === activeTenor.days_to_expiry && activeTenor.mode === "listed"
+                        ? "rounded-full border border-[#E8701A]/18 bg-[#E8701A] px-2.5 py-1 text-[11px] font-medium text-white"
+                        : "rounded-full border border-[#E8701A]/12 bg-[#fff8f2] px-2.5 py-1 text-[11px] text-black/62 transition-colors hover:bg-[#ffefe0] hover:text-[#161616]"
+                    }
+                  >
+                    {formatTenorFromDays(node.days_to_expiry)}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <input
-            type="range"
-            min={minDaysToExpiry}
-            max={maxDaysToExpiry}
-            step={1}
-            value={daysToExpiry}
-            onChange={(event) => setDaysToExpiry(Number(event.target.value))}
-            className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[#f7e7d9] accent-[#E8701A]"
-          />
-          <div className="mt-2 flex flex-wrap justify-between gap-2 text-[11px] text-black/42">
-            {maturityLabels.map((label) => (
-              <span key={label}>{label}</span>
-            ))}
+        ) : (
+          <div className="mb-4 rounded-[14px] border border-[#E8701A]/10 bg-white p-3 text-sm text-black/58">
+            Payoff is defined at expiry, so maturity controls are disabled for this view.
           </div>
-        </div>
+        )}
 
         <GreeksMiniChart
           result={result}
           metric={selectedMetric}
-          timeToExpiryYears={daysToExpiry / 365.25}
+          tenorContext={activeTenor}
+          premiumReference={activeGreeks.theoreticalPrice}
         />
       </div>
 
@@ -821,13 +959,21 @@ function QuantGreeksBlockInner({
 function GreeksMiniChart({
   result,
   metric,
-  timeToExpiryYears,
+  tenorContext,
+  premiumReference,
 }: {
   result: QuantGreeksResult;
   metric: QuantGreeksMetric;
-  timeToExpiryYears: number;
+  tenorContext: ClientTenorContext;
+  premiumReference: number;
 }) {
-  const points = buildGreeksProfile(result, metric, timeToExpiryYears);
+  const points = buildGreeksProfile(result, metric, {
+    timeToExpiryYears: tenorContext.time_to_expiry_years,
+    volatility: tenorContext.volatility,
+    riskFreeRate: tenorContext.riskFreeRate,
+    dividendYield: tenorContext.dividendYield,
+    premiumReference,
+  });
   if (points.length === 0) {
     return null;
   }
@@ -954,7 +1100,7 @@ function GreeksMiniChart({
         <InfoStat label="Spot range" value={`${formatNumber(minSpot)} to ${formatNumber(maxSpot)}`} />
         <InfoStat
           label="Maturity"
-          value={formatTenorFromDays(Math.round(timeToExpiryYears * 365.25))}
+          value={formatTenorFromDays(tenorContext.days_to_expiry)}
         />
         <InfoStat
           label={`${metricLabel} @ spot`}
