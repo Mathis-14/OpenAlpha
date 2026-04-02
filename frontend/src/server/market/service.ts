@@ -213,6 +213,11 @@ export async function getFundamentals(symbol: string): Promise<Fundamentals> {
   return buildFundamentals(await fetchQuoteSummary(normalized));
 }
 
+export async function getDividendYield(symbol: string): Promise<number | null> {
+  const fundamentals = await getFundamentals(symbol);
+  return fundamentals.dividend_yield;
+}
+
 export async function getPriceHistory(
   symbol: string,
   period: PeriodType = "1mo",

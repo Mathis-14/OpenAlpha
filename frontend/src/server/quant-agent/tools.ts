@@ -290,7 +290,7 @@ export const QUANT_TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: "compute_greeks",
       description:
-        "Compute a Black-Scholes option price and Greeks, and drive the Greeks profile chart. Use this for requests to plot or visualize delta, gamma, vega, theta, rho, volga, vanna, or speed. If a symbol is supplied, the tool can infer missing strike, option type, volatility, spot, expiry, and the default risk-free rate from the live chain.",
+        "Compute a Black-Scholes-Merton option price and Greeks, and drive the chain-linked Greeks profile chart. Use this for requests to plot or visualize delta, gamma, vega, theta, rho, volga, vanna, or speed. If a symbol is supplied, the tool can infer missing strike, option type, spot, expiry, dividend yield, and the tenor-matched Treasury risk-free rate from the live chain. Off-grid tenors are interpolated between real listed expiries.",
       parameters: {
         type: "object",
         properties: {
@@ -317,11 +317,11 @@ export const QUANT_TOOL_DEFINITIONS: ToolDefinition[] = [
           },
           volatility: {
             type: "number",
-            description: "Optional volatility as a decimal, e.g. 0.25 for 25%.",
+            description: "Optional volatility as a decimal, e.g. 0.25 for 25%. When supplied, it overrides the live implied-volatility term structure.",
           },
           risk_free_rate: {
             type: "number",
-            description: "Optional risk-free rate as a decimal, e.g. 0.04 for 4%.",
+            description: "Optional risk-free rate as a decimal, e.g. 0.04 for 4%. When supplied, it overrides the tenor-matched Treasury curve.",
           },
           time_to_expiry_years: {
             type: "number",

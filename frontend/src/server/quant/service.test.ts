@@ -16,9 +16,30 @@ test("computeGreeks works without a live chain when all inputs are explicit", as
   assert.equal(result.strike, 100);
   assert.equal(result.spot_price, 102);
   assert.equal(result.volatility, 0.24);
+  assert.equal(result.dividend_yield, 0);
+  assert.equal(result.model, "bsm");
+  assert.equal(result.approximation, "black_scholes_merton_with_continuous_dividend_yield");
+  assert.equal(result.active_tenor?.mode, "listed");
+  assert.ok((result.maturity_nodes?.length ?? 0) >= 1);
   assert.ok(result.theoretical_price > 0);
   assert.ok(result.delta > 0);
-  assert.equal(result.assumptions.length, 0);
+  assert.ok(result.assumptions.length >= 2);
+});
+
+test("computeGreeks rejects conflicting expiration and day tenor inputs", async () => {
+  await assert.rejects(
+    () =>
+      computeGreeks({
+        option_type: "put",
+        strike: 100,
+        spot_price: 100,
+        volatility: 0.25,
+        risk_free_rate: 0.04,
+        expiration: "2026-12-31",
+        days_to_expiry: 30,
+      }),
+    /disagree materially/i,
+  );
 });
 
 test("buildPayoffDiagram computes a long call payoff profile", async () => {
