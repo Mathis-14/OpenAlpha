@@ -328,6 +328,42 @@ export interface QuantOptionChain {
   data_status?: "complete" | "partial";
 }
 
+export interface QuantGreeksAnchorContract {
+  contract_symbol: string | null;
+  strike: number;
+  strike_mode: "exact" | "interpolated" | "nearest";
+  lower_strike?: number | null;
+  upper_strike?: number | null;
+  last_price: number | null;
+  midpoint: number | null;
+  bid: number | null;
+  ask: number | null;
+  open_interest: number | null;
+  volume: number | null;
+  relative_spread: number | null;
+  last_trade_date: string | null;
+}
+
+export interface QuantGreeksTermNode {
+  expiration: string;
+  days_to_expiry: number;
+  time_to_expiry_years: number;
+  volatility: number;
+  risk_free_rate: number;
+  dividend_yield: number;
+  anchor: QuantGreeksAnchorContract;
+}
+
+export interface QuantGreeksActiveTenor {
+  mode: "listed" | "interpolated";
+  days_to_expiry: number;
+  time_to_expiry_years: number;
+  expiration?: string;
+  lower_anchor?: QuantGreeksTermNode;
+  upper_anchor?: QuantGreeksTermNode;
+  clamped?: boolean;
+}
+
 export interface QuantGreeksResult {
   symbol?: string;
   option_type: QuantOptionType;
@@ -335,6 +371,7 @@ export interface QuantGreeksResult {
   expiration?: string;
   spot_price: number;
   risk_free_rate: number;
+  dividend_yield: number;
   volatility: number;
   time_to_expiry_years: number;
   theoretical_price: number;
@@ -346,11 +383,34 @@ export interface QuantGreeksResult {
   volga: number;
   vanna: number;
   speed: number;
+  model?: "bsm";
+  approximation?: "black_scholes_merton_with_continuous_dividend_yield";
+  active_tenor?: QuantGreeksActiveTenor;
+  maturity_nodes?: QuantGreeksTermNode[];
   maturity_range_days?: {
     min: number;
     max: number;
   };
   assumptions: string[];
+}
+
+export interface QuantYieldCurveNode {
+  series_id: string;
+  label: string;
+  tenor_days: number;
+  latest_date: string;
+  rate_percent: number;
+  rate_decimal: number;
+  continuous_rate: number;
+}
+
+export interface QuantYieldCurveResult {
+  as_of: string | null;
+  source: "fred";
+  curve_method: "treasury_constant_maturity_par_curve";
+  interpolation_method: "log_discount_factor";
+  nodes: QuantYieldCurveNode[];
+  warnings?: string[];
 }
 
 export interface QuantSurfacePoint {
@@ -435,6 +495,7 @@ export type AgentEventType =
   | "display_table"
   | "display_quant_chain"
   | "display_quant_greeks"
+  | "display_quant_yield_curve"
   | "display_quant_surface"
   | "display_quant_payoff"
   | "text"

@@ -4,6 +4,7 @@ import type {
   QuantOptionChain,
   QuantPayoffResult,
   QuantSurfaceResult,
+  QuantYieldCurveResult,
 } from "@/types/api";
 
 export type ChatAgentType = "alpha" | "quant-alpha";
@@ -70,6 +71,11 @@ export interface DisplayQuantGreeksEntry {
   preferredMetric?: QuantGreeksMetric;
 }
 
+export interface DisplayQuantYieldCurveEntry {
+  type: "display_quant_yield_curve";
+  curve: QuantYieldCurveResult;
+}
+
 export interface DisplayQuantSurfaceEntry {
   type: "display_quant_surface";
   surface: QuantSurfaceResult;
@@ -91,6 +97,7 @@ export type ChatEntry =
   | DisplayAboutEntry
   | DisplayQuantChainEntry
   | DisplayQuantGreeksEntry
+  | DisplayQuantYieldCurveEntry
   | DisplayQuantSurfaceEntry
   | DisplayQuantPayoffEntry;
 

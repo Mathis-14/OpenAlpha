@@ -1,20 +1,30 @@
 import YahooFinance from "yahoo-finance2";
 import type {
-  MacroCountry,
+  QuantGreeksActiveTenor,
+  QuantGreeksAnchorContract,
   QuantGreeksResult,
   QuantOptionChain,
   QuantOptionContract,
   QuantOptionExpiration,
+  QuantGreeksTermNode,
   QuantOptionType,
   QuantPayoffLeg,
   QuantPayoffResult,
   QuantSurfaceResult,
+  QuantYieldCurveResult,
 } from "@/types/api";
 import { ServiceError } from "@/server/shared/errors";
 import { normalizeDashboardSymbol, toProviderSymbol } from "@/server/market/symbols";
+import { getDividendYield } from "@/server/market/service";
 import { fetchJson } from "@/server/shared/http";
-import { getMacroSnapshotForCountry } from "@/server/macro/service";
+import { deriveActiveTenor, interpolateLinearly } from "@/lib/quant/greeks-context";
 import { computeBlackScholes } from "@/server/quant/black-scholes";
+import {
+  getTreasuryCurve,
+  resolveTreasuryRateForPricing,
+  type TreasuryCurve,
+  type TreasuryRateResolution,
+} from "@/server/quant/rates";
 import { buildArbitrageFreeSurface } from "@/server/quant/ssvi";
 
 const yahooFinance = new YahooFinance({
@@ -111,13 +121,27 @@ type NormalizedGreeksInputs = {
   spotPrice: number;
   volatility: number;
   riskFreeRate: number;
+  dividendYield: number;
   timeToExpiryYears: number;
+  activeTenor: QuantGreeksActiveTenor;
+  maturityNodes: QuantGreeksTermNode[];
   maturityRangeDays?: {
     min: number;
     max: number;
   };
   assumptions: string[];
 };
+
+type StrikeAnchorResult = {
+  volatility: number;
+  anchor: QuantGreeksAnchorContract;
+};
+
+type ResolvedGreeksTermNode = QuantGreeksTermNode & {
+  risk_free_rate_resolution: TreasuryRateResolution | undefined;
+};
+
+const DEFAULT_GREEKS_TARGET_DAYS = 30;
 
 function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -431,33 +455,332 @@ function buildChainResult(
   };
 }
 
-function findNearestContract(
-  chain: QuantOptionChain,
-  optionType: QuantOptionType,
-  strike: number,
-  expiration?: string,
+function getContractPriceSignal(contract: QuantOptionContract): number | null {
+  if (contract.midpoint != null && Number.isFinite(contract.midpoint) && contract.midpoint > 0) {
+    return contract.midpoint;
+  }
+
+  if (contract.last_price != null && Number.isFinite(contract.last_price) && contract.last_price > 0) {
+    return contract.last_price;
+  }
+
+  return null;
+}
+
+function getContractRelativeSpread(contract: QuantOptionContract): number | null {
+  if (
+    contract.bid == null ||
+    contract.ask == null ||
+    !Number.isFinite(contract.bid) ||
+    !Number.isFinite(contract.ask) ||
+    contract.bid < 0 ||
+    contract.ask <= 0 ||
+    contract.ask < contract.bid
+  ) {
+    return null;
+  }
+
+  const midpoint = midpointFromBidAsk(contract.bid, contract.ask);
+  if (midpoint == null || midpoint <= 0) {
+    return null;
+  }
+
+  return (contract.ask - contract.bid) / midpoint;
+}
+
+function getLastTradeTimestamp(contract: QuantOptionContract): number {
+  if (!contract.last_trade_date) {
+    return 0;
+  }
+
+  const timestamp = Date.parse(contract.last_trade_date);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function compareContractsForTargetStrike(
+  left: QuantOptionContract,
+  right: QuantOptionContract,
+  targetStrike: number,
+): number {
+  const leftDistance = Math.abs(left.strike - targetStrike);
+  const rightDistance = Math.abs(right.strike - targetStrike);
+  if (leftDistance !== rightDistance) {
+    return leftDistance - rightDistance;
+  }
+
+  const leftSpread = getContractRelativeSpread(left);
+  const rightSpread = getContractRelativeSpread(right);
+  if (leftSpread != null || rightSpread != null) {
+    return (leftSpread ?? Number.POSITIVE_INFINITY) - (rightSpread ?? Number.POSITIVE_INFINITY);
+  }
+
+  const leftOpenInterest = left.open_interest ?? -1;
+  const rightOpenInterest = right.open_interest ?? -1;
+  if (leftOpenInterest !== rightOpenInterest) {
+    return rightOpenInterest - leftOpenInterest;
+  }
+
+  const leftVolume = left.volume ?? -1;
+  const rightVolume = right.volume ?? -1;
+  if (leftVolume !== rightVolume) {
+    return rightVolume - leftVolume;
+  }
+
+  return getLastTradeTimestamp(right) - getLastTradeTimestamp(left);
+}
+
+function pickBestContract(
+  contracts: QuantOptionContract[],
+  targetStrike: number,
 ): QuantOptionContract | null {
-  const expirations = expiration
-    ? chain.expirations.filter((entry) => entry.expiration === expiration)
-    : chain.expirations;
-
-  const contracts = expirations.flatMap((entry) =>
-    optionType === "call" ? entry.calls : entry.puts,
-  );
-
   if (contracts.length === 0) {
     return null;
   }
 
-  return contracts.reduce((best, contract) => {
-    if (!best) {
-      return contract;
-    }
+  return [...contracts].sort((left, right) =>
+    compareContractsForTargetStrike(left, right, targetStrike),
+  )[0] ?? null;
+}
 
-    return Math.abs(contract.strike - strike) < Math.abs(best.strike - strike)
-      ? contract
+function isUsableGreeksContract(contract: QuantOptionContract): boolean {
+  return (
+    contract.implied_volatility != null &&
+    Number.isFinite(contract.implied_volatility) &&
+    contract.implied_volatility > 0 &&
+    getContractPriceSignal(contract) != null
+  );
+}
+
+function meanOrNull(values: Array<number | null | undefined>): number | null {
+  const usable = values.filter((value): value is number => value != null && Number.isFinite(value));
+  if (usable.length === 0) {
+    return null;
+  }
+
+  return usable.reduce((sum, value) => sum + value, 0) / usable.length;
+}
+
+function getDefaultGreeksTargetDays(nodes: QuantGreeksTermNode[]): number {
+  if (nodes.length === 0) {
+    return DEFAULT_GREEKS_TARGET_DAYS;
+  }
+
+  const nodeAtOrAfterThirty = nodes.find((node) => node.days_to_expiry >= DEFAULT_GREEKS_TARGET_DAYS);
+  if (!nodeAtOrAfterThirty) {
+    return nodes[nodes.length - 1]!.days_to_expiry;
+  }
+
+  const nearestByDistance = nodes.reduce((best, node) => {
+    return Math.abs(node.days_to_expiry - DEFAULT_GREEKS_TARGET_DAYS) <
+      Math.abs(best.days_to_expiry - DEFAULT_GREEKS_TARGET_DAYS)
+      ? node
       : best;
-  }, contracts[0]);
+  }, nodes[0]!);
+
+  if (Math.abs(nodeAtOrAfterThirty.days_to_expiry - DEFAULT_GREEKS_TARGET_DAYS) <= 7) {
+    return nodeAtOrAfterThirty.days_to_expiry;
+  }
+
+  return nearestByDistance.days_to_expiry;
+}
+
+function describeTreasuryRateResolution(
+  resolution: TreasuryRateResolution,
+  curveAsOf: string | null,
+  fallbackRate: number,
+  targetDaysToExpiry: number,
+): string {
+  const asOfLabel = curveAsOf ? ` (latest node date ${curveAsOf})` : "";
+  const tenorLabel = `${Math.max(1, Math.round(targetDaysToExpiry))}D`;
+
+  switch (resolution.coverage_mode) {
+    case "exact":
+      return `Used the ${resolution.lower_node?.label ?? tenorLabel} Treasury node${asOfLabel} for the active risk-free rate.`;
+    case "interpolated":
+      return `Interpolated the active risk-free rate between the ${resolution.lower_node?.label ?? "lower"} and ${resolution.upper_node?.label ?? "upper"} Treasury nodes${asOfLabel}.`;
+    case "edge_clamp_short":
+      return `Used the ${resolution.upper_node?.label ?? "short-end"} Treasury node${asOfLabel} as the short-end risk-free anchor for the active ${tenorLabel} tenor.`;
+    case "edge_clamp_long":
+      return `Used the ${resolution.lower_node?.label ?? "long-end"} Treasury node${asOfLabel} as the long-end risk-free anchor for the active ${tenorLabel} tenor.`;
+    case "fallback":
+    default:
+      return `${resolution.warning ?? `Treasury curve data did not adequately cover the active ${tenorLabel} tenor.`} The risk-free rate fell back to ${(fallbackRate * 100).toFixed(2)}%.`;
+  }
+}
+
+function interpolateOptionalValue(
+  lowerX: number,
+  lowerY: number | null | undefined,
+  upperX: number,
+  upperY: number | null | undefined,
+  targetX: number,
+): number | null {
+  if (
+    lowerY == null ||
+    upperY == null ||
+    !Number.isFinite(lowerY) ||
+    !Number.isFinite(upperY)
+  ) {
+    return null;
+  }
+
+  return interpolateLinearly(lowerX, lowerY, upperX, upperY, targetX);
+}
+
+function buildAnchorContract(
+  contract: QuantOptionContract,
+  strikeMode: QuantGreeksAnchorContract["strike_mode"],
+  targetStrike: number,
+): QuantGreeksAnchorContract {
+  return {
+    contract_symbol: contract.contract_symbol,
+    strike: Number(targetStrike.toFixed(6)),
+    strike_mode: strikeMode,
+    lower_strike: strikeMode === "exact" ? contract.strike : null,
+    upper_strike: strikeMode === "exact" ? contract.strike : null,
+    last_price: contract.last_price,
+    midpoint: contract.midpoint,
+    bid: contract.bid,
+    ask: contract.ask,
+    open_interest: contract.open_interest,
+    volume: contract.volume,
+    relative_spread: getContractRelativeSpread(contract),
+    last_trade_date: contract.last_trade_date,
+  };
+}
+
+function buildInterpolatedAnchor(
+  lowerContract: QuantOptionContract,
+  upperContract: QuantOptionContract,
+  targetStrike: number,
+  timeToExpiryYears: number,
+): StrikeAnchorResult {
+  const lowerTime = Math.max(timeToExpiryYears, 1e-6);
+  const lowerTotalVariance =
+    (lowerContract.implied_volatility! ** 2) * lowerTime;
+  const upperTotalVariance =
+    (upperContract.implied_volatility! ** 2) * lowerTime;
+  const targetTotalVariance = interpolateLinearly(
+    lowerContract.strike,
+    lowerTotalVariance,
+    upperContract.strike,
+    upperTotalVariance,
+    targetStrike,
+  );
+  const targetVolatility = Math.sqrt(Math.max(targetTotalVariance / lowerTime, 1e-10));
+  const interpolatedMidpoint = interpolateOptionalValue(
+    lowerContract.strike,
+    lowerContract.midpoint,
+    upperContract.strike,
+    upperContract.midpoint,
+    targetStrike,
+  );
+  const interpolatedBid = interpolateOptionalValue(
+    lowerContract.strike,
+    lowerContract.bid,
+    upperContract.strike,
+    upperContract.bid,
+    targetStrike,
+  );
+  const interpolatedAsk = interpolateOptionalValue(
+    lowerContract.strike,
+    lowerContract.ask,
+    upperContract.strike,
+    upperContract.ask,
+    targetStrike,
+  );
+  const relativeSpread =
+    interpolatedBid != null && interpolatedAsk != null && interpolatedMidpoint != null && interpolatedMidpoint > 0
+      ? (interpolatedAsk - interpolatedBid) / interpolatedMidpoint
+      : null;
+
+  return {
+    volatility: Number(targetVolatility.toFixed(8)),
+    anchor: {
+      contract_symbol: null,
+      strike: Number(targetStrike.toFixed(6)),
+      strike_mode: "interpolated",
+      lower_strike: lowerContract.strike,
+      upper_strike: upperContract.strike,
+      last_price: meanOrNull([lowerContract.last_price, upperContract.last_price]),
+      midpoint: interpolatedMidpoint != null ? Number(interpolatedMidpoint.toFixed(6)) : null,
+      bid: interpolatedBid != null ? Number(interpolatedBid.toFixed(6)) : null,
+      ask: interpolatedAsk != null ? Number(interpolatedAsk.toFixed(6)) : null,
+      open_interest: meanOrNull([lowerContract.open_interest, upperContract.open_interest]),
+      volume: meanOrNull([lowerContract.volume, upperContract.volume]),
+      relative_spread: relativeSpread != null ? Number(relativeSpread.toFixed(8)) : null,
+      last_trade_date:
+        getLastTradeTimestamp(lowerContract) >= getLastTradeTimestamp(upperContract)
+          ? lowerContract.last_trade_date
+          : upperContract.last_trade_date,
+    },
+  };
+}
+
+function buildStrikeAnchorForExpiration(
+  expiration: QuantOptionExpiration,
+  optionType: QuantOptionType,
+  targetStrike: number,
+): StrikeAnchorResult | null {
+  const usableContracts = (optionType === "call" ? expiration.calls : expiration.puts)
+    .filter(isUsableGreeksContract)
+    .sort((left, right) => left.strike - right.strike);
+
+  if (usableContracts.length === 0) {
+    return null;
+  }
+
+  const exactContracts = usableContracts.filter(
+    (contract) => Math.abs(contract.strike - targetStrike) < 1e-8,
+  );
+  const exactContract = pickBestContract(exactContracts, targetStrike);
+  if (exactContract) {
+    return {
+      volatility: exactContract.implied_volatility!,
+      anchor: buildAnchorContract(exactContract, "exact", targetStrike),
+    };
+  }
+
+  const lowerStrike = [...new Set(
+    usableContracts
+      .filter((contract) => contract.strike < targetStrike)
+      .map((contract) => contract.strike),
+  )].sort((left, right) => right - left)[0];
+  const upperStrike = [...new Set(
+    usableContracts
+      .filter((contract) => contract.strike > targetStrike)
+      .map((contract) => contract.strike),
+  )].sort((left, right) => left - right)[0];
+
+  if (lowerStrike != null && upperStrike != null && upperStrike > lowerStrike) {
+    const lowerContract = pickBestContract(
+      usableContracts.filter((contract) => contract.strike === lowerStrike),
+      targetStrike,
+    );
+    const upperContract = pickBestContract(
+      usableContracts.filter((contract) => contract.strike === upperStrike),
+      targetStrike,
+    );
+
+    if (lowerContract && upperContract) {
+      return buildInterpolatedAnchor(
+        lowerContract,
+        upperContract,
+        targetStrike,
+        expiration.time_to_expiry_years,
+      );
+    }
+  }
+
+  const nearestContract = pickBestContract(usableContracts, targetStrike);
+  if (!nearestContract) {
+    return null;
+  }
+
+  return {
+    volatility: nearestContract.implied_volatility!,
+    anchor: buildAnchorContract(nearestContract, "nearest", targetStrike),
+  };
 }
 
 function inferSpotReference(legs: QuantPayoffLeg[], fallbackSpot?: number): number {
@@ -475,14 +798,43 @@ function inferSpotReference(legs: QuantPayoffLeg[], fallbackSpot?: number): numb
 }
 
 export async function getQuantRiskFreeRate(
-  country: MacroCountry = "us",
+  timeToExpiryYears: number = 1,
+  curve?: TreasuryCurve,
 ): Promise<number> {
   try {
-    const snapshot = await getMacroSnapshotForCountry(country);
-    return Number((snapshot.treasury_10y.latest_value / 100).toFixed(6));
+    const activeCurve = curve ?? await getTreasuryCurve();
+    return resolveTreasuryRateForPricing(
+      activeCurve,
+      timeToExpiryYears,
+      FALLBACK_RISK_FREE_RATE,
+    ).rate;
   } catch {
     return FALLBACK_RISK_FREE_RATE;
   }
+}
+
+export function shapeTreasuryCurveForQuant(curve: TreasuryCurve): QuantYieldCurveResult {
+  return {
+    as_of: curve.as_of,
+    source: "fred",
+    curve_method: "treasury_constant_maturity_par_curve",
+    interpolation_method: "log_discount_factor",
+    nodes: curve.nodes.map((node) => ({
+      series_id: node.series_id,
+      label: node.label,
+      tenor_days: node.tenor_days,
+      latest_date: node.latest_date,
+      rate_percent: Number(node.rate_percent.toFixed(6)),
+      rate_decimal: Number(node.rate_decimal.toFixed(8)),
+      continuous_rate: Number(node.continuous_rate.toFixed(8)),
+    })),
+    warnings: curve.warnings,
+  };
+}
+
+export async function getRiskFreeYieldCurve(): Promise<QuantYieldCurveResult> {
+  const curve = await getTreasuryCurve();
+  return shapeTreasuryCurveForQuant(curve);
 }
 
 export async function fetchOptionChain(
@@ -513,10 +865,19 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
   const normalizedSymbol = input.symbol?.trim()
     ? normalizeDashboardSymbol(input.symbol)
     : undefined;
+  const requestedExpirationDate = input.expiration ? toExpirationDate(input.expiration) : null;
+
+  if (input.expiration && !requestedExpirationDate) {
+    throw new ServiceError(422, {
+      error: "invalid_request",
+      ticker: normalizedSymbol,
+      detail: "Expiration must be a valid yyyy-mm-dd date.",
+    });
+  }
 
   let chain: QuantOptionChain | null = null;
   if (normalizedSymbol) {
-    chain = await fetchOptionChain(normalizedSymbol, input.expiration);
+    chain = await fetchOptionChain(normalizedSymbol);
   }
 
   const optionType = input.option_type ?? "call";
@@ -524,11 +885,10 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
     assumptions.push("Defaulted option type to call.");
   }
 
-  const expiration =
-    input.expiration ??
-    chain?.selected_expiration ??
-    chain?.available_expirations[0];
-  const expirationDate = expiration ? toExpirationDate(expiration) : null;
+  const listedRequestedExpiration =
+    input.expiration && chain
+      ? chain.expirations.find((entry) => entry.expiration === input.expiration) ?? null
+      : null;
 
   const strike =
     input.strike ??
@@ -545,11 +905,6 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
     assumptions.push(`Used ATM strike ${strike.toFixed(2)} from the live chain.`);
   }
 
-  const contract =
-    chain
-      ? findNearestContract(chain, optionType, strike, expiration)
-      : null;
-
   const spotPrice =
     input.spot_price ??
     chain?.spot_price;
@@ -564,67 +919,260 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
     assumptions.push(`Used live spot price ${spotPrice.toFixed(2)} from ${chain.symbol}.`);
   }
 
-  const volatility =
-    input.volatility ??
-    contract?.implied_volatility;
-  if (volatility == null || !Number.isFinite(volatility) || volatility <= 0) {
-    throw new ServiceError(422, {
-      error: "invalid_request",
-      ticker: normalizedSymbol,
-      detail: "compute_greeks requires a valid volatility or a chain contract with implied volatility.",
-    });
-  }
-  if (input.volatility == null && contract?.implied_volatility != null) {
-    assumptions.push(
-      `Used implied volatility ${(contract.implied_volatility * 100).toFixed(1)}% from the nearest ${optionType} contract.`,
+  const explicitTargetDays =
+    typeof input.days_to_expiry === "number" && Number.isFinite(input.days_to_expiry)
+      ? Math.max(input.days_to_expiry, 1)
+      : typeof input.time_to_expiry_years === "number" &&
+          Number.isFinite(input.time_to_expiry_years) &&
+          input.time_to_expiry_years > 0
+        ? Math.max(input.time_to_expiry_years * 365.25, 1)
+        : null;
+
+  if (requestedExpirationDate && explicitTargetDays != null) {
+    const requestedExpirationDays = Math.max(
+      1,
+      (requestedExpirationDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000),
     );
+
+    if (Math.abs(requestedExpirationDays - explicitTargetDays) > 2) {
+      throw new ServiceError(422, {
+        error: "invalid_request",
+        ticker: normalizedSymbol,
+        detail: "Expiration and days_to_expiry/time_to_expiry_years disagree materially. Provide only one tenor input or align them.",
+      });
+    }
   }
 
-  const riskFreeRate =
-    input.risk_free_rate ??
-    (await getQuantRiskFreeRate("us"));
+  const dividendYield =
+    normalizedSymbol ? (await getDividendYield(normalizedSymbol)) ?? 0 : 0;
+  if (normalizedSymbol && dividendYield > 0) {
+    assumptions.push(
+      `Used live dividend yield ${(dividendYield * 100).toFixed(2)}% as the continuous-yield proxy.`,
+    );
+  } else {
+    assumptions.push("Used a 0.00% dividend yield assumption.");
+  }
+
+  let treasuryCurve: TreasuryCurve | null = null;
   if (input.risk_free_rate == null) {
-    assumptions.push(`Used live U.S. 10-year Treasury yield as the risk-free rate (${(riskFreeRate * 100).toFixed(2)}%).`);
+    try {
+      treasuryCurve = await getTreasuryCurve();
+    } catch {
+      assumptions.push(
+        `Treasury curve fetch failed, so the risk-free rate fell back to ${(FALLBACK_RISK_FREE_RATE * 100).toFixed(2)}%.`,
+      );
+    }
   }
 
-  const timeToExpiryYears =
-    input.time_to_expiry_years ??
-    (typeof input.days_to_expiry === "number" && Number.isFinite(input.days_to_expiry)
-      ? Math.max(input.days_to_expiry, 1) / 365.25
-      : null) ??
-    (expirationDate ? yearsToExpiry(expirationDate) : null);
-  if (timeToExpiryYears == null || !Number.isFinite(timeToExpiryYears) || timeToExpiryYears <= 0) {
+  let maturityNodes: ResolvedGreeksTermNode[] = [];
+  if (chain) {
+    maturityNodes = chain.expirations
+      .map((expiration) => {
+        const strikeAnchor = buildStrikeAnchorForExpiration(expiration, optionType, strike);
+        if (!strikeAnchor) {
+          return null;
+        }
+
+        const rateResolution =
+          input.risk_free_rate == null
+            ? resolveTreasuryRateForPricing(
+                treasuryCurve,
+                expiration.time_to_expiry_years,
+                FALLBACK_RISK_FREE_RATE,
+              )
+            : undefined;
+        const nodeRate = input.risk_free_rate ?? rateResolution?.rate ?? FALLBACK_RISK_FREE_RATE;
+
+        return {
+          expiration: expiration.expiration,
+          days_to_expiry: expiration.days_to_expiry,
+          time_to_expiry_years: expiration.time_to_expiry_years,
+          volatility: Number((input.volatility ?? strikeAnchor.volatility).toFixed(8)),
+          risk_free_rate: Number(nodeRate.toFixed(8)),
+          dividend_yield: Number(dividendYield.toFixed(8)),
+          anchor: strikeAnchor.anchor,
+          risk_free_rate_resolution: rateResolution,
+        };
+      })
+      .filter((node): node is ResolvedGreeksTermNode => node != null)
+      .sort((left, right) => left.time_to_expiry_years - right.time_to_expiry_years);
+  }
+
+  if (maturityNodes.length === 0) {
+    const fallbackTimeToExpiryYears =
+      input.time_to_expiry_years ??
+      (explicitTargetDays != null ? explicitTargetDays / 365.25 : null) ??
+      (requestedExpirationDate ? yearsToExpiry(requestedExpirationDate) : null);
+
+    if (
+      fallbackTimeToExpiryYears == null ||
+      !Number.isFinite(fallbackTimeToExpiryYears) ||
+      fallbackTimeToExpiryYears <= 0
+    ) {
+      throw new ServiceError(422, {
+        error: "invalid_request",
+        ticker: normalizedSymbol,
+        detail:
+          "compute_greeks requires a valid time to expiry or an expiration date that can be inferred from the chain.",
+      });
+    }
+
+    const fallbackRateResolution =
+      input.risk_free_rate == null
+        ? resolveTreasuryRateForPricing(
+            treasuryCurve,
+            fallbackTimeToExpiryYears,
+            FALLBACK_RISK_FREE_RATE,
+          )
+        : undefined;
+    const fallbackRate =
+      input.risk_free_rate ??
+      fallbackRateResolution?.rate ??
+      FALLBACK_RISK_FREE_RATE;
+    const fallbackVolatility = input.volatility;
+
+    if (fallbackVolatility == null || !Number.isFinite(fallbackVolatility) || fallbackVolatility <= 0) {
+      throw new ServiceError(422, {
+        error: "invalid_request",
+        ticker: normalizedSymbol,
+        detail: "compute_greeks requires a valid volatility when no live chain contract can anchor the request.",
+      });
+    }
+
+    const syntheticDate = requestedExpirationDate ?? new Date(
+      Date.now() + fallbackTimeToExpiryYears * 365.25 * 24 * 60 * 60 * 1000,
+    );
+    maturityNodes = [
+      {
+        expiration: formatDate(syntheticDate),
+        days_to_expiry: Math.max(1, Math.round(fallbackTimeToExpiryYears * 365.25)),
+        time_to_expiry_years: Number(fallbackTimeToExpiryYears.toFixed(8)),
+        volatility: Number(fallbackVolatility.toFixed(8)),
+        risk_free_rate: Number(fallbackRate.toFixed(8)),
+        dividend_yield: Number(dividendYield.toFixed(8)),
+        anchor: {
+          contract_symbol: null,
+          strike: Number(strike.toFixed(6)),
+          strike_mode: "exact",
+          lower_strike: strike,
+          upper_strike: strike,
+          last_price: null,
+          midpoint: null,
+          bid: null,
+          ask: null,
+          open_interest: null,
+          volume: null,
+          relative_spread: null,
+          last_trade_date: null,
+        },
+        risk_free_rate_resolution: fallbackRateResolution,
+      },
+    ];
+    assumptions.push("No usable live option-chain anchor was available, so Greeks were computed from explicit synthetic inputs.");
+  }
+
+  if (input.volatility != null) {
+    assumptions.push(
+      `Applied user-specified volatility ${(input.volatility * 100).toFixed(2)}% across the selected tenor profile.`,
+    );
+  }
+
+  if (input.risk_free_rate != null) {
+    assumptions.push(
+      `Applied user-specified risk-free rate ${(input.risk_free_rate * 100).toFixed(2)}% across the selected tenor profile.`,
+    );
+  }
+
+  const targetDaysToExpiry =
+    listedRequestedExpiration?.days_to_expiry ??
+    explicitTargetDays ??
+    (requestedExpirationDate ? daysToExpiry(requestedExpirationDate) : null) ??
+    getDefaultGreeksTargetDays(maturityNodes);
+  const activeTenor = deriveActiveTenor(maturityNodes, targetDaysToExpiry);
+  if (!activeTenor) {
     throw new ServiceError(422, {
       error: "invalid_request",
       ticker: normalizedSymbol,
-      detail:
-        "compute_greeks requires a valid time to expiry or an expiration date that can be inferred from the chain.",
+      detail: "Unable to build a valid maturity context for Greeks.",
     });
   }
-  if (input.time_to_expiry_years == null && input.days_to_expiry != null) {
+
+  const activeExpiration =
+    activeTenor.mode === "listed"
+      ? activeTenor.expiration
+      : listedRequestedExpiration?.expiration;
+
+  if (listedRequestedExpiration) {
+    assumptions.push(`Used listed expiry ${listedRequestedExpiration.expiration}.`);
+  } else if (input.expiration && activeTenor.mode === "interpolated") {
     assumptions.push(
-      `Used ${Math.max(input.days_to_expiry, 1).toFixed(0)} days to expiry (${timeToExpiryYears.toFixed(4)} years).`,
+      `Requested expiration ${input.expiration} is not a listed expiry, so Greeks were interpolated between surrounding listed expiries.`,
+    );
+  } else if (activeTenor.mode === "interpolated") {
+    assumptions.push(
+      `Interpolated tenor ${activeTenor.days_to_expiry}D between ${activeTenor.lower_anchor?.days_to_expiry ?? "?"}D and ${activeTenor.upper_anchor?.days_to_expiry ?? "?"}D listed expiries.`,
+    );
+  } else if (!input.expiration && explicitTargetDays == null) {
+    assumptions.push(
+      `No tenor was specified, so Greeks defaulted to a representative ${activeTenor.days_to_expiry}D target tenor anchored to the live listed expiry ladder.`,
     );
   }
-  if (input.time_to_expiry_years == null && expiration) {
-    assumptions.push(`Used expiration ${expiration} to derive time to expiry (${timeToExpiryYears.toFixed(4)} years).`);
+
+  if (activeTenor.clamped) {
+    assumptions.push("Requested tenor lay outside the listed expiry range and was clamped to the nearest listed edge.");
   }
-  assumptions.push("Greeks convention: vega and rho are quoted per 1 vol/rate point, and theta is quoted per day.");
+
+  let activeRiskFreeRate = activeTenor.riskFreeRate;
+  if (input.risk_free_rate == null && treasuryCurve) {
+    const activeRateResolution = resolveTreasuryRateForPricing(
+      treasuryCurve,
+      activeTenor.time_to_expiry_years,
+      FALLBACK_RISK_FREE_RATE,
+    );
+    activeRiskFreeRate = activeRateResolution.rate;
+    assumptions.push(
+      describeTreasuryRateResolution(
+        activeRateResolution,
+        treasuryCurve.as_of,
+        FALLBACK_RISK_FREE_RATE,
+        activeTenor.days_to_expiry,
+      ),
+    );
+    if (
+      treasuryCurve.warnings &&
+      treasuryCurve.warnings.length > 0 &&
+      activeRateResolution.source === "treasury_curve"
+    ) {
+      assumptions.push(
+        "Treasury curve data was partially available, but the active tenor remained adequately covered for pricing.",
+      );
+    }
+  }
+
+  assumptions.push(
+    "Pricing and Greeks use the Black-Scholes-Merton approximation with continuous dividend yield. Listed U.S. equity options are American-style, so this remains an approximation.",
+  );
+  assumptions.push(
+    "Greeks convention: vega is quoted per 1 vol point, rho per 1 rate point, theta per calendar day, volga per vol-point squared, and vanna per vol point.",
+  );
 
   return {
     symbol: normalizedSymbol,
-    expiration,
+    expiration: activeExpiration,
     optionType,
     strike,
     spotPrice,
-    volatility,
-    riskFreeRate,
-    timeToExpiryYears,
+    volatility: activeTenor.volatility,
+    riskFreeRate: activeRiskFreeRate,
+    dividendYield: activeTenor.dividendYield,
+    timeToExpiryYears: activeTenor.time_to_expiry_years,
+    activeTenor,
+    maturityNodes,
     maturityRangeDays:
-      chain && chain.expirations.length > 0
+      maturityNodes.length > 0
         ? {
-            min: chain.expirations[0]!.days_to_expiry,
-            max: chain.expirations[chain.expirations.length - 1]!.days_to_expiry,
+            min: maturityNodes[0]!.days_to_expiry,
+            max: maturityNodes[maturityNodes.length - 1]!.days_to_expiry,
           }
         : undefined,
     assumptions,
@@ -642,6 +1190,7 @@ export async function computeGreeks(
     normalized.timeToExpiryYears,
     normalized.volatility,
     normalized.riskFreeRate,
+    normalized.dividendYield,
   );
 
   return {
@@ -651,6 +1200,7 @@ export async function computeGreeks(
     expiration: normalized.expiration,
     spot_price: Number(normalized.spotPrice.toFixed(6)),
     risk_free_rate: Number(normalized.riskFreeRate.toFixed(6)),
+    dividend_yield: Number(normalized.dividendYield.toFixed(6)),
     volatility: Number(normalized.volatility.toFixed(6)),
     time_to_expiry_years: Number(normalized.timeToExpiryYears.toFixed(6)),
     theoretical_price: Number(result.theoreticalPrice.toFixed(6)),
@@ -662,6 +1212,10 @@ export async function computeGreeks(
     volga: Number(result.volga.toFixed(6)),
     vanna: Number(result.vanna.toFixed(6)),
     speed: Number(result.speed.toFixed(6)),
+    model: "bsm",
+    approximation: "black_scholes_merton_with_continuous_dividend_yield",
+    active_tenor: normalized.activeTenor,
+    maturity_nodes: normalized.maturityNodes,
     maturity_range_days: normalized.maturityRangeDays,
     assumptions: normalized.assumptions,
   };
@@ -671,7 +1225,7 @@ export async function buildVolSurface(
   symbol: string,
 ): Promise<QuantSurfaceResult> {
   const chain = await fetchOptionChain(symbol);
-  const riskFreeRate = await getQuantRiskFreeRate("us");
+  const riskFreeRate = await getQuantRiskFreeRate(1);
   return buildArbitrageFreeSurface(chain, riskFreeRate);
 }
 

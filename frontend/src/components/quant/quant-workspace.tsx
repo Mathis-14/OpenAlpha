@@ -11,6 +11,7 @@ import {
   Sigma,
   Sparkles,
   TableProperties,
+  TrendingUp,
   Waves,
 } from "lucide-react";
 import AgentChat from "@/components/dashboard/agent-chat";
@@ -18,14 +19,18 @@ import QuantSurfacePlot from "@/components/quant/quant-surface-plot";
 import RequestQuotaBadge from "@/components/request-quota-badge";
 import type { AgentSSE } from "@/lib/api";
 import { computeBlackScholes } from "@/lib/quant/black-scholes";
+import { deriveActiveTenor } from "@/lib/quant/greeks-context";
 import type { ChatEntry, ChatMessage } from "@/types/chat";
 import type {
+  QuantGreeksActiveTenor,
   QuantGreeksMetric,
   QuantGreeksResult,
+  QuantGreeksTermNode,
   QuantOptionChain,
   QuantOptionContract,
   QuantPayoffResult,
   QuantSurfaceResult,
+  QuantYieldCurveResult,
 } from "@/types/api";
 
 type QuantDisplayItem =
@@ -36,13 +41,18 @@ type QuantDisplayItem =
       result: QuantGreeksResult;
       preferredMetric?: QuantGreeksMetric;
     }
+  | {
+      id: string;
+      type: "display_quant_yield_curve";
+      curve: QuantYieldCurveResult;
+    }
   | { id: string; type: "display_quant_surface"; surface: QuantSurfaceResult }
   | { id: string; type: "display_quant_payoff"; payoff: QuantPayoffResult };
 
 const QUICK_PICKS = [
   "Show me the SPY volatility surface.",
   "Fetch the AAPL option chain and summarize the nearest expiry.",
-  "Compute the Greeks for a NVDA 150 call expiring next month.",
+  "Show me the current Treasury constant-maturity curve.",
   "Build the payoff diagram for a TSLA call spread.",
   "Show me the nearest QQQ option chain with the ATM contracts.",
   "Compute the Greeks for a MSFT put with 30 days to expiry and 25% vol.",
@@ -104,6 +114,14 @@ function formatPercent(value: number | null | undefined, digits = 1): string {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
+function formatRatePercent(value: number | null | undefined, digits = 2): string {
+  if (value == null || !Number.isFinite(value)) {
+    return "N/A";
+  }
+
+  return `${value.toFixed(digits)}%`;
+}
+
 function formatTenorFromDays(days: number): string {
   const safeDays = Math.max(1, Math.round(days));
   if (safeDays < 30) {
@@ -148,6 +166,13 @@ function formatDateLabel(value: string | null | undefined): string {
     day: "numeric",
     year: "numeric",
   }).format(date);
+}
+
+function getYieldCurveNode(
+  curve: QuantYieldCurveResult,
+  label: string,
+) {
+  return curve.nodes.find((node) => node.label === label) ?? null;
 }
 
 function getNearestExpiration(chain: QuantOptionChain) {
@@ -210,22 +235,29 @@ function getMetricValue(
   result: QuantGreeksResult,
   metric: QuantGreeksMetric,
   spot: number,
-  timeToExpiryYears: number,
+  inputs: {
+    timeToExpiryYears: number;
+    volatility: number;
+    riskFreeRate: number;
+    dividendYield: number;
+    premiumReference: number;
+  },
 ): number {
   const greeks = computeBlackScholes(
     result.option_type,
     spot,
     result.strike,
-    timeToExpiryYears,
-    result.volatility,
-    result.risk_free_rate,
+    inputs.timeToExpiryYears,
+    inputs.volatility,
+    inputs.riskFreeRate,
+    inputs.dividendYield,
   );
 
   switch (metric) {
     case "price":
       return greeks.theoreticalPrice;
     case "payoff":
-      return getIntrinsicValue(result, spot) - result.theoretical_price;
+      return getIntrinsicValue(result, spot) - inputs.premiumReference;
     case "delta":
       return greeks.delta;
     case "gamma":
@@ -248,7 +280,13 @@ function getMetricValue(
 function buildGreeksProfile(
   result: QuantGreeksResult,
   metric: QuantGreeksMetric,
-  timeToExpiryYears: number,
+  inputs: {
+    timeToExpiryYears: number;
+    volatility: number;
+    riskFreeRate: number;
+    dividendYield: number;
+    premiumReference: number;
+  },
 ): Array<{ spot: number; value: number }> {
   const lowerAnchor = Math.min(result.spot_price, result.strike);
   const upperAnchor = Math.max(result.spot_price, result.strike);
@@ -260,9 +298,69 @@ function buildGreeksProfile(
     const spot = start + ((end - start) * index) / steps;
     return {
       spot: Number(spot.toFixed(4)),
-      value: getMetricValue(result, metric, spot, timeToExpiryYears),
+      value: getMetricValue(result, metric, spot, inputs),
     };
   });
+}
+
+type ClientTenorContext = QuantGreeksActiveTenor & {
+  volatility: number;
+  riskFreeRate: number;
+  dividendYield: number;
+};
+
+function resolveClientTenorContext(
+  result: QuantGreeksResult,
+  targetDaysToExpiry: number,
+): ClientTenorContext {
+  const derived =
+    result.maturity_nodes && result.maturity_nodes.length > 0
+      ? deriveActiveTenor(result.maturity_nodes, targetDaysToExpiry)
+      : null;
+
+  if (derived) {
+    return derived;
+  }
+
+  return {
+    mode: result.active_tenor?.mode ?? "listed",
+    days_to_expiry:
+      result.active_tenor?.days_to_expiry ?? Math.max(1, Math.round(result.time_to_expiry_years * 365.25)),
+    time_to_expiry_years: result.active_tenor?.time_to_expiry_years ?? result.time_to_expiry_years,
+    expiration: result.active_tenor?.expiration ?? result.expiration,
+    lower_anchor: result.active_tenor?.lower_anchor,
+    upper_anchor: result.active_tenor?.upper_anchor,
+    clamped: result.active_tenor?.clamped,
+    volatility: result.volatility,
+    riskFreeRate: result.risk_free_rate,
+    dividendYield: result.dividend_yield ?? 0,
+  };
+}
+
+function formatExpiryContext(
+  activeTenor: ClientTenorContext,
+): string {
+  if (activeTenor.mode === "listed") {
+    return activeTenor.expiration ? formatDateLabel(activeTenor.expiration) : "Listed expiry";
+  }
+
+  if (activeTenor.lower_anchor && activeTenor.upper_anchor) {
+    return `${formatTenorFromDays(activeTenor.lower_anchor.days_to_expiry)} to ${formatTenorFromDays(activeTenor.upper_anchor.days_to_expiry)}`;
+  }
+
+  return "Interpolated tenor";
+}
+
+function getMaturityNodeLabels(nodes: QuantGreeksTermNode[]): string[] {
+  if (nodes.length === 0) {
+    return [];
+  }
+
+  const anchorDays = nodes.map((node) => node.days_to_expiry);
+  const candidates = [anchorDays[0], anchorDays[Math.floor(anchorDays.length / 2)], anchorDays[anchorDays.length - 1]]
+    .filter((value, index, values): value is number => value != null && values.indexOf(value) === index);
+
+  return candidates.map((days) => formatTenorFromDays(days));
 }
 
 function createDisplayItem(event: AgentSSE): QuantDisplayItem | null {
@@ -280,6 +378,12 @@ function createDisplayItem(event: AgentSSE): QuantDisplayItem | null {
           typeof event.data.preferred_metric === "string"
             ? (event.data.preferred_metric as QuantGreeksMetric)
             : undefined,
+      };
+    case "display_quant_yield_curve":
+      return {
+        id,
+        type: event.event,
+        curve: event.data.curve as QuantYieldCurveResult,
       };
     case "display_quant_surface":
       return {
@@ -312,6 +416,8 @@ function createDisplayItemFromEntry(
         result: entry.result,
         preferredMetric: entry.preferredMetric,
       };
+    case "display_quant_yield_curve":
+      return { id, type: entry.type, curve: entry.curve };
     case "display_quant_surface":
       return { id, type: entry.type, surface: entry.surface };
     case "display_quant_payoff":
@@ -348,6 +454,8 @@ export default function QuantWorkspace() {
           return Boolean(item.chain.symbol);
         case "display_quant_greeks":
           return Boolean(item.result.symbol);
+        case "display_quant_yield_curve":
+          return false;
         case "display_quant_surface":
           return Boolean(item.surface.symbol);
         case "display_quant_payoff":
@@ -364,6 +472,8 @@ export default function QuantWorkspace() {
         return latest.chain.symbol;
       case "display_quant_greeks":
         return latest.result.symbol ?? null;
+      case "display_quant_yield_curve":
+        return null;
       case "display_quant_surface":
         return latest.surface.symbol;
       case "display_quant_payoff":
@@ -471,6 +581,8 @@ export default function QuantWorkspace() {
                       preferredMetric={item.preferredMetric}
                     />
                   );
+                case "display_quant_yield_curve":
+                  return <QuantYieldCurveBlock key={item.id} curve={item.curve} />;
                 case "display_quant_surface":
                   return <QuantSurfaceBlock key={item.id} surface={item.surface} />;
                 case "display_quant_payoff":
@@ -529,6 +641,10 @@ function QuantWelcomeState({
             <div className="flex items-center gap-2">
               <CandlestickChart className="h-4 w-4 text-[#E8701A]" />
               <span>Payoff diagrams for multi-leg structures</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-[#E8701A]" />
+              <span>Treasury constant-maturity curve used for risk-free rates</span>
             </div>
           </div>
         </div>
@@ -690,21 +806,51 @@ function QuantGreeksBlockInner({
   const [selectedMetric, setSelectedMetric] = useState<QuantGreeksMetric>(
     preferredMetric ?? "delta",
   );
-  const baseDaysToExpiry = Math.max(
-    1,
-    Math.round(result.time_to_expiry_years * 365.25),
-  );
-  const minDaysToExpiry = 1;
-  const maxDaysToExpiry = Math.max(
-    minDaysToExpiry,
-    result.maturity_range_days?.max ?? Math.max(365, Math.ceil(baseDaysToExpiry * 2)),
-  );
+  const listedNodes = result.maturity_nodes ?? [];
+  const baseDaysToExpiry =
+    result.active_tenor?.days_to_expiry ??
+    Math.max(1, Math.round(result.time_to_expiry_years * 365.25));
+  const minDaysToExpiry =
+    listedNodes[0]?.days_to_expiry ??
+    result.maturity_range_days?.min ??
+    baseDaysToExpiry;
+  const maxDaysToExpiry =
+    listedNodes[listedNodes.length - 1]?.days_to_expiry ??
+    result.maturity_range_days?.max ??
+    baseDaysToExpiry;
   const defaultDaysToExpiry = Math.min(
     maxDaysToExpiry,
-    Math.max(minDaysToExpiry, 2),
+    Math.max(minDaysToExpiry, baseDaysToExpiry),
   );
   const [daysToExpiry, setDaysToExpiry] = useState(defaultDaysToExpiry);
-  const maturityLabels = getMaturitySliderLabels(minDaysToExpiry, maxDaysToExpiry);
+  const activeTenor = useMemo(
+    () => resolveClientTenorContext(result, daysToExpiry),
+    [daysToExpiry, result],
+  );
+  const activeGreeks = useMemo(
+    () =>
+      computeBlackScholes(
+        result.option_type,
+        result.spot_price,
+        result.strike,
+        activeTenor.time_to_expiry_years,
+        activeTenor.volatility,
+        activeTenor.riskFreeRate,
+        activeTenor.dividendYield,
+      ),
+    [activeTenor, result.option_type, result.spot_price, result.strike],
+  );
+  const maturityLabels =
+    listedNodes.length > 0
+      ? getMaturityNodeLabels(listedNodes)
+      : getMaturitySliderLabels(minDaysToExpiry, maxDaysToExpiry);
+  const showMaturityControl = selectedMetric !== "payoff" && maxDaysToExpiry > minDaysToExpiry;
+  const titleTenorLabel =
+    activeTenor.mode === "listed"
+      ? activeTenor.expiration
+        ? formatDateLabel(activeTenor.expiration)
+        : formatTenorFromDays(activeTenor.days_to_expiry)
+      : `${formatTenorFromDays(activeTenor.days_to_expiry)} target tenor`;
 
   return (
     <section className="rounded-[18px] border border-[#E8701A]/12 bg-white p-5 shadow-[0_18px_34px_-30px_rgba(232,112,26,0.35)]">
@@ -712,31 +858,37 @@ function QuantGreeksBlockInner({
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Sigma className="h-4 w-4 text-[#E8701A]" />
-            <p className="text-sm font-medium text-[#161616]">Black-Scholes Greeks</p>
+            <p className="text-sm font-medium text-[#161616]">Chain-linked BSM Greeks</p>
           </div>
           <h3 className="text-[1.2rem] font-medium text-[#161616]">
             {(result.symbol ?? "Custom")}
             <span className="ml-2 text-black/44">
-              {result.option_type.toUpperCase()} {formatNumber(result.strike)} {result.expiration ?? ""}
+              {result.option_type.toUpperCase()} {formatNumber(result.strike)} {titleTenorLabel}
             </span>
           </h3>
         </div>
-        <InfoStat label="Theo price" value={formatNumber(result.theoretical_price, 4)} />
+        <InfoStat label="Theo price" value={formatNumber(activeGreeks.theoreticalPrice, 4)} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <InfoStat label="Delta" value={formatNumber(result.delta, 4)} />
-        <InfoStat label="Gamma" value={formatNumber(result.gamma, 6)} />
-        <InfoStat label="Vega / 1 vol pt" value={formatNumber(result.vega, 4)} />
-        <InfoStat label="Theta / day" value={formatNumber(result.theta, 4)} />
-        <InfoStat label="Rho / 1 rate pt" value={formatNumber(result.rho, 4)} />
-        <InfoStat label="Volga" value={formatNumber(result.volga, 4)} />
-        <InfoStat label="Vanna" value={formatNumber(result.vanna, 4)} />
-        <InfoStat label="Speed" value={formatNumber(result.speed, 6)} />
-        <InfoStat label="Volatility" value={formatPercent(result.volatility)} />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <InfoStat label="Delta" value={formatNumber(activeGreeks.delta, 4)} />
+        <InfoStat label="Gamma" value={formatNumber(activeGreeks.gamma, 6)} />
+        <InfoStat label="Vega / 1 vol pt" value={formatNumber(activeGreeks.vega, 4)} />
+        <InfoStat label="Theta / day" value={formatNumber(activeGreeks.theta, 4)} />
+        <InfoStat label="Rho / 1 rate pt" value={formatNumber(activeGreeks.rho, 4)} />
+        <InfoStat label="Volga" value={formatNumber(activeGreeks.volga, 4)} />
+        <InfoStat label="Vanna" value={formatNumber(activeGreeks.vanna, 4)} />
+        <InfoStat label="Speed" value={formatNumber(activeGreeks.speed, 6)} />
+        <InfoStat label="Volatility" value={formatPercent(activeTenor.volatility)} />
         <InfoStat label="Spot" value={formatNumber(result.spot_price)} />
-        <InfoStat label="Risk-free" value={formatPercent(result.risk_free_rate, 2)} />
-        <InfoStat label="TTE" value={formatTenorFromDays(baseDaysToExpiry)} />
+        <InfoStat label="Risk-free" value={formatPercent(activeTenor.riskFreeRate, 2)} />
+        <InfoStat label="Dividend yield" value={formatPercent(activeTenor.dividendYield, 2)} />
+        <InfoStat label="TTE" value={formatTenorFromDays(activeTenor.days_to_expiry)} />
+        <InfoStat
+          label="Tenor mode"
+          value={activeTenor.mode === "listed" ? "Listed expiry" : "Interpolated"}
+        />
+        <InfoStat label="Expiry context" value={formatExpiryContext(activeTenor)} />
       </div>
 
       <div className="mt-4 rounded-[14px] border border-[#E8701A]/10 bg-[#fff8f2] p-4">
@@ -746,7 +898,7 @@ function QuantGreeksBlockInner({
               Greeks visualization
             </p>
             <p className="text-sm text-black/58">
-              Explore how the selected metric changes across spot prices and maturity.
+              Explore how the selected metric changes across spot prices and real listed or interpolated tenor nodes.
             </p>
           </div>
           <div className="flex flex-wrap justify-center gap-2">
@@ -767,35 +919,61 @@ function QuantGreeksBlockInner({
           </div>
         </div>
 
-        <div className="mb-4 rounded-[14px] border border-[#E8701A]/10 bg-white p-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#c85f14]">
-              Maturity
-            </p>
-            <p className="text-sm text-black/64">
-              {formatTenorFromDays(daysToExpiry)}
-            </p>
+        {showMaturityControl ? (
+          <div className="mb-4 rounded-[14px] border border-[#E8701A]/10 bg-white p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#c85f14]">
+                Maturity
+              </p>
+              <p className="text-sm text-black/64">
+                {formatTenorFromDays(activeTenor.days_to_expiry)}
+                {activeTenor.mode === "interpolated" ? " (interpolated)" : ""}
+              </p>
+            </div>
+            <input
+              type="range"
+              min={minDaysToExpiry}
+              max={maxDaysToExpiry}
+              step={1}
+              value={daysToExpiry}
+              onChange={(event) => setDaysToExpiry(Number(event.target.value))}
+              className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[#f7e7d9] accent-[#E8701A]"
+            />
+            <div className="mt-2 flex flex-wrap justify-between gap-2 text-[11px] text-black/42">
+              {maturityLabels.map((label) => (
+                <span key={label}>{label}</span>
+              ))}
+            </div>
+            {listedNodes.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {listedNodes.map((node) => (
+                  <button
+                    key={`${node.expiration}-${node.days_to_expiry}`}
+                    type="button"
+                    onClick={() => setDaysToExpiry(node.days_to_expiry)}
+                    className={
+                      node.days_to_expiry === activeTenor.days_to_expiry && activeTenor.mode === "listed"
+                        ? "rounded-full border border-[#E8701A]/18 bg-[#E8701A] px-2.5 py-1 text-[11px] font-medium text-white"
+                        : "rounded-full border border-[#E8701A]/12 bg-[#fff8f2] px-2.5 py-1 text-[11px] text-black/62 transition-colors hover:bg-[#ffefe0] hover:text-[#161616]"
+                    }
+                  >
+                    {formatTenorFromDays(node.days_to_expiry)}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <input
-            type="range"
-            min={minDaysToExpiry}
-            max={maxDaysToExpiry}
-            step={1}
-            value={daysToExpiry}
-            onChange={(event) => setDaysToExpiry(Number(event.target.value))}
-            className="h-2 w-full cursor-pointer appearance-none rounded-full bg-[#f7e7d9] accent-[#E8701A]"
-          />
-          <div className="mt-2 flex flex-wrap justify-between gap-2 text-[11px] text-black/42">
-            {maturityLabels.map((label) => (
-              <span key={label}>{label}</span>
-            ))}
+        ) : (
+          <div className="mb-4 rounded-[14px] border border-[#E8701A]/10 bg-white p-3 text-sm text-black/58">
+            Payoff is defined at expiry, so maturity controls are disabled for this view.
           </div>
-        </div>
+        )}
 
         <GreeksMiniChart
           result={result}
           metric={selectedMetric}
-          timeToExpiryYears={daysToExpiry / 365.25}
+          tenorContext={activeTenor}
+          premiumReference={activeGreeks.theoreticalPrice}
         />
       </div>
 
@@ -821,21 +999,60 @@ function QuantGreeksBlockInner({
 function GreeksMiniChart({
   result,
   metric,
-  timeToExpiryYears,
+  tenorContext,
+  premiumReference,
 }: {
   result: QuantGreeksResult;
   metric: QuantGreeksMetric;
-  timeToExpiryYears: number;
+  tenorContext: ClientTenorContext;
+  premiumReference: number;
 }) {
-  const points = buildGreeksProfile(result, metric, timeToExpiryYears);
+  const pricingInputs = {
+    timeToExpiryYears: tenorContext.time_to_expiry_years,
+    volatility: tenorContext.volatility,
+    riskFreeRate: tenorContext.riskFreeRate,
+    dividendYield: tenorContext.dividendYield,
+    premiumReference,
+  };
+  const comparisonTenors = useMemo(() => {
+    if (metric === "payoff" || !result.maturity_nodes || result.maturity_nodes.length === 0) {
+      return [tenorContext];
+    }
+
+    return result.maturity_nodes.map((node) => resolveClientTenorContext(result, node.days_to_expiry));
+  }, [metric, result, tenorContext]);
+  const [minValue, maxValue] = useMemo(() => {
+    const envelopeValues = comparisonTenors.flatMap((context) =>
+      buildGreeksProfile(result, metric, {
+        timeToExpiryYears: context.time_to_expiry_years,
+        volatility: context.volatility,
+        riskFreeRate: context.riskFreeRate,
+        dividendYield: context.dividendYield,
+        premiumReference,
+      }).map((point) => point.value),
+    );
+    const localMin = Math.min(...envelopeValues);
+    const localMax = Math.max(...envelopeValues);
+
+    if (!Number.isFinite(localMin) || !Number.isFinite(localMax)) {
+      return [0, 1];
+    }
+
+    if (Math.abs(localMax - localMin) < 1e-10) {
+      const padding = Math.max(Math.abs(localMax) * 0.1, 0.01);
+      return [localMin - padding, localMax + padding];
+    }
+
+    const padding = (localMax - localMin) * 0.08;
+    return [localMin - padding, localMax + padding];
+  }, [comparisonTenors, metric, premiumReference, result]);
+  const points = buildGreeksProfile(result, metric, pricingInputs);
   if (points.length === 0) {
     return null;
   }
 
   const minSpot = points[0]?.spot ?? 0;
   const maxSpot = points[points.length - 1]?.spot ?? 1;
-  const minValue = Math.min(...points.map((point) => point.value));
-  const maxValue = Math.max(...points.map((point) => point.value));
   const selectedPoint = points.reduce((best, point) => {
     if (!best) {
       return point;
@@ -898,6 +1115,7 @@ function GreeksMiniChart({
             },
             yaxis: {
               title: { text: metricLabel },
+              range: [minValue, maxValue],
               gridcolor: "rgba(232,112,26,0.10)",
               zerolinecolor: "rgba(22,22,22,0.10)",
             },
@@ -954,7 +1172,7 @@ function GreeksMiniChart({
         <InfoStat label="Spot range" value={`${formatNumber(minSpot)} to ${formatNumber(maxSpot)}`} />
         <InfoStat
           label="Maturity"
-          value={formatTenorFromDays(Math.round(timeToExpiryYears * 365.25))}
+          value={formatTenorFromDays(tenorContext.days_to_expiry)}
         />
         <InfoStat
           label={`${metricLabel} @ spot`}
@@ -965,6 +1183,167 @@ function GreeksMiniChart({
         />
       </div>
     </div>
+  );
+}
+
+function QuantYieldCurveBlock({
+  curve,
+}: {
+  curve: QuantYieldCurveResult;
+}) {
+  const nodes = [...curve.nodes].sort((left, right) => left.tenor_days - right.tenor_days);
+  const oneMonth = getYieldCurveNode(curve, "1M");
+  const twoYear = getYieldCurveNode(curve, "2Y");
+  const tenYear = getYieldCurveNode(curve, "10Y");
+  const thirtyYear = getYieldCurveNode(curve, "30Y");
+  const slope2s10s =
+    twoYear && tenYear
+      ? Number((tenYear.rate_percent - twoYear.rate_percent).toFixed(2))
+      : null;
+
+  return (
+    <section className="rounded-[18px] border border-[#E8701A]/12 bg-white p-5 shadow-[0_18px_34px_-30px_rgba(232,112,26,0.35)]">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-[#E8701A]" />
+            <p className="text-sm font-medium text-[#161616]">Treasury CMT curve</p>
+          </div>
+          <h3 className="text-[1.2rem] font-medium text-[#161616]">
+            Current U.S. Treasury constant-maturity curve
+          </h3>
+          <p className="text-sm text-black/58">
+            These are Treasury constant-maturity par yields, which Quant Alpha uses as the base curve for tenor-matched risk-free rates in Greeks pricing.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <InfoStat label="As of" value={formatDateLabel(curve.as_of)} />
+          <InfoStat label="1M" value={formatRatePercent(oneMonth?.rate_percent)} />
+          <InfoStat label="2Y" value={formatRatePercent(twoYear?.rate_percent)} />
+          <InfoStat label="10Y" value={formatRatePercent(tenYear?.rate_percent)} />
+          <InfoStat label="2s10s" value={formatRatePercent(slope2s10s)} />
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-[14px] border border-[#E8701A]/12 bg-white p-2">
+        <Plot
+          data={[
+            {
+              type: "scatter",
+              mode: "lines+markers",
+              x: nodes.map((node) => node.label),
+              y: nodes.map((node) => node.rate_percent),
+              line: {
+                color: "#E8701A",
+                width: 3,
+                shape: "spline",
+                smoothing: 0.9,
+              },
+              marker: {
+                color: "#E8701A",
+                size: 8,
+                line: {
+                  color: "rgba(255,255,255,0.92)",
+                  width: 1.5,
+                },
+              },
+              hovertemplate:
+                "Tenor %{text}<br>Yield %{y:.2f}%<br>As of %{customdata}<extra></extra>",
+              text: nodes.map((node) => node.label),
+              customdata: nodes.map((node) => node.latest_date),
+              name: "Yield",
+            },
+          ]}
+          layout={{
+            autosize: true,
+            height: 300,
+            margin: { l: 50, r: 20, t: 10, b: 46 },
+            paper_bgcolor: "rgba(0,0,0,0)",
+            plot_bgcolor: "rgba(255,255,255,0)",
+            showlegend: false,
+            xaxis: {
+              title: { text: "CMT tenor" },
+              type: "category",
+              categoryorder: "array",
+              categoryarray: nodes.map((node) => node.label),
+              tickangle: 0,
+              gridcolor: "rgba(232,112,26,0.08)",
+              zerolinecolor: "rgba(22,22,22,0.10)",
+            },
+            yaxis: {
+              title: { text: "Par yield (%)" },
+              gridcolor: "rgba(232,112,26,0.10)",
+              zerolinecolor: "rgba(22,22,22,0.10)",
+            },
+          }}
+          config={{
+            displaylogo: false,
+            displayModeBar: false,
+            responsive: true,
+            modeBarButtonsToRemove: [
+              "lasso2d",
+              "select2d",
+              "autoScale2d",
+              "hoverCompareCartesian",
+              "hoverClosestCartesian",
+              "toImage",
+            ],
+          }}
+          style={{ width: "100%", height: "300px" }}
+        />
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+        <div className="rounded-[14px] border border-[#E8701A]/10 bg-[#fff8f2] p-4">
+          <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-[#c85f14]">
+            Curve methodology
+          </p>
+          <div className="space-y-2 text-sm text-black/62">
+            <p>Source: FRED U.S. Treasury constant-maturity series.</p>
+            <p>Nodes: 1M, 3M, 6M, 1Y, 2Y, 3Y, 5Y, 7Y, 10Y, 20Y, 30Y.</p>
+            <p>These are CMT par yields, not a bootstrapped zero-coupon curve.</p>
+            <p>Greeks interpolate tenor-matched continuous rates on log discount factors, not on a fixed 10Y yield.</p>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-[14px] border border-[#E8701A]/10 bg-[#fff8f2]">
+          <div className="max-h-[220px] overflow-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="sticky top-0 bg-[#fff5ec] text-black/64">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Tenor</th>
+                  <th className="px-3 py-2 font-medium">Yield</th>
+                  <th className="px-3 py-2 font-medium">Obs.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {nodes.map((node) => (
+                  <tr key={node.series_id} className="border-t border-[#E8701A]/8">
+                    <td className="px-3 py-2 font-medium text-[#161616]">{node.label}</td>
+                    <td className="px-3 py-2 text-black/68">{formatRatePercent(node.rate_percent)}</td>
+                    <td className="px-3 py-2 text-black/56">{formatDateLabel(node.latest_date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {thirtyYear && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <InfoStat label="30Y" value={formatRatePercent(thirtyYear.rate_percent)} />
+          <InfoStat label="Nodes" value={String(nodes.length)} />
+          <InfoStat label="Curve" value="Treasury CMT" />
+          <InfoStat label="Interpolation" value="Log DF" />
+        </div>
+      )}
+
+      {curve.warnings && curve.warnings.length > 0 && (
+        <p className="mt-3 text-sm text-black/56">
+          Partial curve warning: {curve.warnings[0]}
+        </p>
+      )}
+    </section>
   );
 }
 
