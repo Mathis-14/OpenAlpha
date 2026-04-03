@@ -28,6 +28,20 @@ export type TreasuryCurve = {
   warnings?: string[];
 };
 
+export type TreasuryRateResolution = {
+  rate: number;
+  source: "treasury_curve" | "fallback";
+  coverage_mode:
+    | "exact"
+    | "interpolated"
+    | "edge_clamp_short"
+    | "edge_clamp_long"
+    | "fallback";
+  lower_node?: TreasuryCurveNode;
+  upper_node?: TreasuryCurveNode;
+  warning?: string;
+};
+
 const TREASURY_SERIES = [
   { seriesId: "DGS1MO", label: "1M", tenorDays: 30 },
   { seriesId: "DGS3MO", label: "3M", tenorDays: 91 },
@@ -41,6 +55,9 @@ const TREASURY_SERIES = [
   { seriesId: "DGS20", label: "20Y", tenorDays: 365 * 20 },
   { seriesId: "DGS30", label: "30Y", tenorDays: 365 * 30 },
 ] as const;
+
+const SHORT_EDGE_MAX_DAYS = 31;
+const LONG_EDGE_MIN_DAYS = 365 * 10;
 
 function getFredApiKey(): string {
   const key = process.env.FRED_API_KEY?.trim();
@@ -248,4 +265,97 @@ export function interpolateTreasuryContinuousRate(
     lowerLogDiscount + weight * (upperLogDiscount - lowerLogDiscount);
 
   return Number(((-interpolatedLogDiscount) / tenorYears).toFixed(8));
+}
+
+export function resolveTreasuryRateForPricing(
+  curve: TreasuryCurve | null | undefined,
+  timeToExpiryYears: number,
+  fallbackRate: number,
+): TreasuryRateResolution {
+  const tenorYears = Math.max(timeToExpiryYears, 1 / 365.25);
+  const targetDays = tenorYears * 365.25;
+  const roundedTargetDays = Math.max(1, Math.round(targetDays));
+
+  if (!curve || curve.nodes.length === 0) {
+    return {
+      rate: fallbackRate,
+      source: "fallback",
+      coverage_mode: "fallback",
+      warning: `Treasury curve data was unavailable for the ${roundedTargetDays}D tenor.`,
+    };
+  }
+
+  const nodes = curve.nodes;
+  const exactNode =
+    nodes.find((node) => Math.abs(node.tenor_days - targetDays) < 0.5) ?? null;
+  if (exactNode) {
+    return {
+      rate: exactNode.continuous_rate,
+      source: "treasury_curve",
+      coverage_mode: "exact",
+      lower_node: exactNode,
+      upper_node: exactNode,
+    };
+  }
+
+  const firstNode = nodes[0]!;
+  if (targetDays < firstNode.tenor_days) {
+    if (firstNode.tenor_days <= SHORT_EDGE_MAX_DAYS) {
+      return {
+        rate: firstNode.continuous_rate,
+        source: "treasury_curve",
+        coverage_mode: "edge_clamp_short",
+        upper_node: firstNode,
+      };
+    }
+
+    return {
+      rate: fallbackRate,
+      source: "fallback",
+      coverage_mode: "fallback",
+      warning:
+        `Treasury curve coverage for the ${roundedTargetDays}D tenor starts at ${firstNode.label}.`,
+    };
+  }
+
+  const lastNode = nodes[nodes.length - 1]!;
+  if (targetDays > lastNode.tenor_days) {
+    if (lastNode.tenor_days >= LONG_EDGE_MIN_DAYS) {
+      return {
+        rate: lastNode.continuous_rate,
+        source: "treasury_curve",
+        coverage_mode: "edge_clamp_long",
+        lower_node: lastNode,
+      };
+    }
+
+    return {
+      rate: fallbackRate,
+      source: "fallback",
+      coverage_mode: "fallback",
+      warning:
+        `Treasury curve coverage for the ${roundedTargetDays}D tenor ends at ${lastNode.label}.`,
+    };
+  }
+
+  const upperIndex = nodes.findIndex((node) => node.tenor_days > targetDays);
+  if (upperIndex <= 0) {
+    return {
+      rate: fallbackRate,
+      source: "fallback",
+      coverage_mode: "fallback",
+      warning: `Treasury curve coverage could not bracket the ${roundedTargetDays}D tenor.`,
+    };
+  }
+
+  const lowerNode = nodes[upperIndex - 1]!;
+  const upperNode = nodes[upperIndex]!;
+
+  return {
+    rate: interpolateTreasuryContinuousRate(curve, timeToExpiryYears),
+    source: "treasury_curve",
+    coverage_mode: "interpolated",
+    lower_node: lowerNode,
+    upper_node: upperNode,
+  };
 }

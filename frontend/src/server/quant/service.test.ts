@@ -79,6 +79,140 @@ test("shapeTreasuryCurveForQuant exposes the Treasury curve used for risk-free i
   assert.equal(result.nodes[1]?.label, "10Y");
 });
 
+test("computeGreeks falls back when Treasury coverage is inadequate for the requested tenor", { concurrency: false }, async () => {
+  const originalFetch = global.fetch;
+  const originalKey = process.env.FRED_API_KEY;
+
+  process.env.FRED_API_KEY = "test-key";
+  global.fetch = (async (input: URL | RequestInfo) => {
+    const href =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+    const url = new URL(href);
+    const seriesId = url.searchParams.get("series_id") ?? "unknown";
+
+    if (seriesId === "DGS10") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          observations: [{ date: "2026-04-02", value: "4.10" }],
+        }),
+      } as Response;
+    }
+
+    if (seriesId === "DGS30") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          observations: [{ date: "2026-04-02", value: "4.30" }],
+        }),
+      } as Response;
+    }
+
+    return {
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+    } as Response;
+  }) as typeof fetch;
+
+  try {
+    const result = await computeGreeks({
+      option_type: "call",
+      strike: 100,
+      spot_price: 100,
+      volatility: 0.22,
+      time_to_expiry_years: 30 / 365.25,
+    });
+
+    assert.equal(result.risk_free_rate, 0.04);
+    assert.ok(
+      result.assumptions.some((assumption) =>
+        /coverage for the 30D tenor starts at 10Y/i.test(assumption),
+      ),
+    );
+  } finally {
+    global.fetch = originalFetch;
+    if (originalKey == null) {
+      delete process.env.FRED_API_KEY;
+    } else {
+      process.env.FRED_API_KEY = originalKey;
+    }
+  }
+});
+
+test("computeGreeks uses bracketed Treasury nodes when the tenor is adequately covered", { concurrency: false }, async () => {
+  const originalFetch = global.fetch;
+  const originalKey = process.env.FRED_API_KEY;
+
+  process.env.FRED_API_KEY = "test-key";
+  global.fetch = (async (input: URL | RequestInfo) => {
+    const href =
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url;
+    const url = new URL(href);
+    const seriesId = url.searchParams.get("series_id") ?? "unknown";
+
+    if (seriesId === "DGS1MO") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          observations: [{ date: "2026-04-02", value: "4.00" }],
+        }),
+      } as Response;
+    }
+
+    if (seriesId === "DGS3MO") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          observations: [{ date: "2026-04-02", value: "4.20" }],
+        }),
+      } as Response;
+    }
+
+    return {
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+    } as Response;
+  }) as typeof fetch;
+
+  try {
+    const result = await computeGreeks({
+      option_type: "put",
+      strike: 100,
+      spot_price: 100,
+      volatility: 0.25,
+      time_to_expiry_years: 45 / 365.25,
+    });
+
+    assert.notEqual(result.risk_free_rate, 0.04);
+    assert.ok(
+      result.assumptions.some((assumption) =>
+        /between the 1M and 3M Treasury nodes/i.test(assumption),
+      ),
+    );
+  } finally {
+    global.fetch = originalFetch;
+    if (originalKey == null) {
+      delete process.env.FRED_API_KEY;
+    } else {
+      process.env.FRED_API_KEY = originalKey;
+    }
+  }
+});
+
 test("buildPayoffDiagram computes a long call payoff profile", async () => {
   const result = await buildPayoffDiagram({
     spot_price: 100,

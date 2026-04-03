@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   getTreasuryCurve,
   interpolateTreasuryContinuousRate,
+  resolveTreasuryRateForPricing,
   type TreasuryCurve,
 } from "./rates.ts";
 
@@ -53,6 +54,47 @@ test("interpolateTreasuryContinuousRate interpolates inside the curve", () => {
   const rate = interpolateTreasuryContinuousRate(SAMPLE_CURVE, 0.5);
   assert.ok(rate > SAMPLE_CURVE.nodes[0]!.continuous_rate);
   assert.ok(rate < SAMPLE_CURVE.nodes[2]!.continuous_rate);
+});
+
+test("resolveTreasuryRateForPricing allows short-end clamp only when the short node is near 1M", () => {
+  const resolution = resolveTreasuryRateForPricing(SAMPLE_CURVE, 7 / 365.25, 0.04);
+
+  assert.equal(resolution.source, "treasury_curve");
+  assert.equal(resolution.coverage_mode, "edge_clamp_short");
+  assert.equal(resolution.rate, SAMPLE_CURVE.nodes[0]!.continuous_rate);
+});
+
+test("resolveTreasuryRateForPricing falls back when only long-end nodes survive for a short tenor", () => {
+  const longOnlyCurve: TreasuryCurve = {
+    as_of: "2026-04-01",
+    nodes: [
+      {
+        series_id: "DGS10",
+        label: "10Y",
+        tenor_days: 3650,
+        latest_date: "2026-04-01",
+        rate_percent: 4.2,
+        rate_decimal: 0.042,
+        continuous_rate: Math.log(1.042),
+      },
+      {
+        series_id: "DGS30",
+        label: "30Y",
+        tenor_days: 365 * 30,
+        latest_date: "2026-04-01",
+        rate_percent: 4.35,
+        rate_decimal: 0.0435,
+        continuous_rate: Math.log(1.0435),
+      },
+    ],
+  };
+
+  const resolution = resolveTreasuryRateForPricing(longOnlyCurve, 30 / 365.25, 0.04);
+
+  assert.equal(resolution.source, "fallback");
+  assert.equal(resolution.coverage_mode, "fallback");
+  assert.equal(resolution.rate, 0.04);
+  assert.match(resolution.warning ?? "", /starts at 10Y/i);
 });
 
 test("getTreasuryCurve retries transient node failures and tolerates one missing node", { concurrency: false }, async () => {

@@ -21,8 +21,9 @@ import { deriveActiveTenor, interpolateLinearly } from "@/lib/quant/greeks-conte
 import { computeBlackScholes } from "@/server/quant/black-scholes";
 import {
   getTreasuryCurve,
-  interpolateTreasuryContinuousRate,
+  resolveTreasuryRateForPricing,
   type TreasuryCurve,
+  type TreasuryRateResolution,
 } from "@/server/quant/rates";
 import { buildArbitrageFreeSurface } from "@/server/quant/ssvi";
 
@@ -134,6 +135,10 @@ type NormalizedGreeksInputs = {
 type StrikeAnchorResult = {
   volatility: number;
   anchor: QuantGreeksAnchorContract;
+};
+
+type ResolvedGreeksTermNode = QuantGreeksTermNode & {
+  risk_free_rate_resolution: TreasuryRateResolution | undefined;
 };
 
 const DEFAULT_GREEKS_TARGET_DAYS = 30;
@@ -579,6 +584,30 @@ function getDefaultGreeksTargetDays(nodes: QuantGreeksTermNode[]): number {
   return nearestByDistance.days_to_expiry;
 }
 
+function describeTreasuryRateResolution(
+  resolution: TreasuryRateResolution,
+  curveAsOf: string | null,
+  fallbackRate: number,
+  targetDaysToExpiry: number,
+): string {
+  const asOfLabel = curveAsOf ? ` (latest node date ${curveAsOf})` : "";
+  const tenorLabel = `${Math.max(1, Math.round(targetDaysToExpiry))}D`;
+
+  switch (resolution.coverage_mode) {
+    case "exact":
+      return `Used the ${resolution.lower_node?.label ?? tenorLabel} Treasury node${asOfLabel} for the active risk-free rate.`;
+    case "interpolated":
+      return `Interpolated the active risk-free rate between the ${resolution.lower_node?.label ?? "lower"} and ${resolution.upper_node?.label ?? "upper"} Treasury nodes${asOfLabel}.`;
+    case "edge_clamp_short":
+      return `Used the ${resolution.upper_node?.label ?? "short-end"} Treasury node${asOfLabel} as the short-end risk-free anchor for the active ${tenorLabel} tenor.`;
+    case "edge_clamp_long":
+      return `Used the ${resolution.lower_node?.label ?? "long-end"} Treasury node${asOfLabel} as the long-end risk-free anchor for the active ${tenorLabel} tenor.`;
+    case "fallback":
+    default:
+      return `${resolution.warning ?? `Treasury curve data did not adequately cover the active ${tenorLabel} tenor.`} The risk-free rate fell back to ${(fallbackRate * 100).toFixed(2)}%.`;
+  }
+}
+
 function interpolateOptionalValue(
   lowerX: number,
   lowerY: number | null | undefined,
@@ -774,7 +803,11 @@ export async function getQuantRiskFreeRate(
 ): Promise<number> {
   try {
     const activeCurve = curve ?? await getTreasuryCurve();
-    return interpolateTreasuryContinuousRate(activeCurve, timeToExpiryYears);
+    return resolveTreasuryRateForPricing(
+      activeCurve,
+      timeToExpiryYears,
+      FALLBACK_RISK_FREE_RATE,
+    ).rate;
   } catch {
     return FALLBACK_RISK_FREE_RATE;
   }
@@ -793,8 +826,8 @@ export function shapeTreasuryCurveForQuant(curve: TreasuryCurve): QuantYieldCurv
       latest_date: node.latest_date,
       rate_percent: Number(node.rate_percent.toFixed(6)),
       rate_decimal: Number(node.rate_decimal.toFixed(8)),
-        continuous_rate: Number(node.continuous_rate.toFixed(8)),
-      })),
+      continuous_rate: Number(node.continuous_rate.toFixed(8)),
+    })),
     warnings: curve.warnings,
   };
 }
@@ -924,9 +957,6 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
   if (input.risk_free_rate == null) {
     try {
       treasuryCurve = await getTreasuryCurve();
-      assumptions.push(
-        `Used a tenor-matched U.S. Treasury curve${treasuryCurve.as_of ? ` (latest node date ${treasuryCurve.as_of})` : ""} for the risk-free rate.`,
-      );
     } catch {
       assumptions.push(
         `Treasury curve fetch failed, so the risk-free rate fell back to ${(FALLBACK_RISK_FREE_RATE * 100).toFixed(2)}%.`,
@@ -934,7 +964,7 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
     }
   }
 
-  let maturityNodes: QuantGreeksTermNode[] = [];
+  let maturityNodes: ResolvedGreeksTermNode[] = [];
   if (chain) {
     maturityNodes = chain.expirations
       .map((expiration) => {
@@ -943,11 +973,15 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
           return null;
         }
 
-        const nodeRate =
-          input.risk_free_rate ??
-          (treasuryCurve
-            ? interpolateTreasuryContinuousRate(treasuryCurve, expiration.time_to_expiry_years)
-            : FALLBACK_RISK_FREE_RATE);
+        const rateResolution =
+          input.risk_free_rate == null
+            ? resolveTreasuryRateForPricing(
+                treasuryCurve,
+                expiration.time_to_expiry_years,
+                FALLBACK_RISK_FREE_RATE,
+              )
+            : undefined;
+        const nodeRate = input.risk_free_rate ?? rateResolution?.rate ?? FALLBACK_RISK_FREE_RATE;
 
         return {
           expiration: expiration.expiration,
@@ -957,9 +991,10 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
           risk_free_rate: Number(nodeRate.toFixed(8)),
           dividend_yield: Number(dividendYield.toFixed(8)),
           anchor: strikeAnchor.anchor,
-        } satisfies QuantGreeksTermNode;
+          risk_free_rate_resolution: rateResolution,
+        };
       })
-      .filter((node): node is QuantGreeksTermNode => node != null)
+      .filter((node): node is ResolvedGreeksTermNode => node != null)
       .sort((left, right) => left.time_to_expiry_years - right.time_to_expiry_years);
   }
 
@@ -982,11 +1017,18 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
       });
     }
 
+    const fallbackRateResolution =
+      input.risk_free_rate == null
+        ? resolveTreasuryRateForPricing(
+            treasuryCurve,
+            fallbackTimeToExpiryYears,
+            FALLBACK_RISK_FREE_RATE,
+          )
+        : undefined;
     const fallbackRate =
       input.risk_free_rate ??
-      (treasuryCurve
-        ? interpolateTreasuryContinuousRate(treasuryCurve, fallbackTimeToExpiryYears)
-        : FALLBACK_RISK_FREE_RATE);
+      fallbackRateResolution?.rate ??
+      FALLBACK_RISK_FREE_RATE;
     const fallbackVolatility = input.volatility;
 
     if (fallbackVolatility == null || !Number.isFinite(fallbackVolatility) || fallbackVolatility <= 0) {
@@ -1023,6 +1065,7 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
           relative_spread: null,
           last_trade_date: null,
         },
+        risk_free_rate_resolution: fallbackRateResolution,
       },
     ];
     assumptions.push("No usable live option-chain anchor was available, so Greeks were computed from explicit synthetic inputs.");
@@ -1079,6 +1122,33 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
     assumptions.push("Requested tenor lay outside the listed expiry range and was clamped to the nearest listed edge.");
   }
 
+  let activeRiskFreeRate = activeTenor.riskFreeRate;
+  if (input.risk_free_rate == null && treasuryCurve) {
+    const activeRateResolution = resolveTreasuryRateForPricing(
+      treasuryCurve,
+      activeTenor.time_to_expiry_years,
+      FALLBACK_RISK_FREE_RATE,
+    );
+    activeRiskFreeRate = activeRateResolution.rate;
+    assumptions.push(
+      describeTreasuryRateResolution(
+        activeRateResolution,
+        treasuryCurve.as_of,
+        FALLBACK_RISK_FREE_RATE,
+        activeTenor.days_to_expiry,
+      ),
+    );
+    if (
+      treasuryCurve.warnings &&
+      treasuryCurve.warnings.length > 0 &&
+      activeRateResolution.source === "treasury_curve"
+    ) {
+      assumptions.push(
+        "Treasury curve data was partially available, but the active tenor remained adequately covered for pricing.",
+      );
+    }
+  }
+
   assumptions.push(
     "Pricing and Greeks use the Black-Scholes-Merton approximation with continuous dividend yield. Listed U.S. equity options are American-style, so this remains an approximation.",
   );
@@ -1093,7 +1163,7 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
     strike,
     spotPrice,
     volatility: activeTenor.volatility,
-    riskFreeRate: activeTenor.riskFreeRate,
+    riskFreeRate: activeRiskFreeRate,
     dividendYield: activeTenor.dividendYield,
     timeToExpiryYears: activeTenor.time_to_expiry_years,
     activeTenor,
