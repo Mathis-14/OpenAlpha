@@ -1253,6 +1253,11 @@ function sseToEntry(sse: AgentSSE): ChatEntry | null {
             ? (sse.data.preferred_metric as import("@/types/api").QuantGreeksMetric)
             : undefined,
       };
+    case "display_quant_yield_curve":
+      return {
+        type: "display_quant_yield_curve",
+        curve: sse.data.curve as import("@/types/api").QuantYieldCurveResult,
+      };
     case "display_quant_surface":
       return {
         type: "display_quant_surface",

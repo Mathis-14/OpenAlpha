@@ -394,6 +394,25 @@ export interface QuantGreeksResult {
   assumptions: string[];
 }
 
+export interface QuantYieldCurveNode {
+  series_id: string;
+  label: string;
+  tenor_days: number;
+  latest_date: string;
+  rate_percent: number;
+  rate_decimal: number;
+  continuous_rate: number;
+}
+
+export interface QuantYieldCurveResult {
+  as_of: string | null;
+  source: "fred";
+  curve_method: "treasury_constant_maturity_par_curve";
+  interpolation_method: "log_discount_factor";
+  nodes: QuantYieldCurveNode[];
+  warnings?: string[];
+}
+
 export interface QuantSurfacePoint {
   expiration: string;
   days_to_expiry: number;
@@ -476,6 +495,7 @@ export type AgentEventType =
   | "display_table"
   | "display_quant_chain"
   | "display_quant_greeks"
+  | "display_quant_yield_curve"
   | "display_quant_surface"
   | "display_quant_payoff"
   | "text"

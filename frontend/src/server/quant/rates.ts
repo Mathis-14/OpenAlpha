@@ -25,6 +25,7 @@ export type TreasuryCurveNode = {
 export type TreasuryCurve = {
   as_of: string | null;
   nodes: TreasuryCurveNode[];
+  warnings?: string[];
 };
 
 const TREASURY_SERIES = [
@@ -66,7 +67,11 @@ function toContinuousRate(rateDecimal: number): number {
   return Math.log(1 + Math.max(rateDecimal, 0));
 }
 
-async function fetchLatestObservation(seriesId: string): Promise<{
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchLatestObservationOnce(seriesId: string): Promise<{
   latest_date: string;
   rate_percent: number;
 }> {
@@ -116,8 +121,36 @@ async function fetchLatestObservation(seriesId: string): Promise<{
   };
 }
 
+async function fetchLatestObservation(seriesId: string): Promise<{
+  latest_date: string;
+  rate_percent: number;
+}> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await fetchLatestObservationOnce(seriesId);
+    } catch (error) {
+      lastError = error;
+
+      const shouldRetry =
+        error instanceof ServiceError &&
+        error.status >= 500 &&
+        attempt < 2;
+
+      if (!shouldRetry) {
+        throw error;
+      }
+
+      await delay(150 * (attempt + 1));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(`Unable to fetch Treasury node ${seriesId}.`);
+}
+
 export async function getTreasuryCurve(): Promise<TreasuryCurve> {
-  const observations = await Promise.all(
+  const observations = await Promise.allSettled(
     TREASURY_SERIES.map(async (series) => {
       const latest = await fetchLatestObservation(series.seriesId);
       const rateDecimal = latest.rate_percent / 100;
@@ -133,7 +166,30 @@ export async function getTreasuryCurve(): Promise<TreasuryCurve> {
     }),
   );
 
-  const nodes = observations.sort((left, right) => left.tenor_days - right.tenor_days);
+  const nodes: TreasuryCurveNode[] = [];
+  const warnings: string[] = [];
+
+  for (const result of observations) {
+    if (result.status === "fulfilled") {
+      nodes.push(result.value);
+      continue;
+    }
+
+    warnings.push(
+      result.reason instanceof Error ? result.reason.message : String(result.reason),
+    );
+  }
+
+  nodes.sort((left, right) => left.tenor_days - right.tenor_days);
+
+  if (nodes.length < 2) {
+    throw new ServiceError(503, {
+      error: "upstream_unavailable",
+      provider: "fred",
+      detail: "Not enough Treasury curve nodes were available.",
+    });
+  }
+
   const as_of = nodes.reduce<string | null>((latest, node) => {
     if (!latest || node.latest_date > latest) {
       return node.latest_date;
@@ -142,7 +198,11 @@ export async function getTreasuryCurve(): Promise<TreasuryCurve> {
     return latest;
   }, null);
 
-  return { as_of, nodes };
+  return {
+    as_of,
+    nodes,
+    warnings: warnings.length > 0 ? warnings : undefined,
+  };
 }
 
 export function interpolateTreasuryContinuousRate(

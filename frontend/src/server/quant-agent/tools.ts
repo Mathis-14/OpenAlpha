@@ -6,12 +6,14 @@ import type {
   QuantPayoffLeg,
   QuantPayoffResult,
   QuantSurfaceResult,
+  QuantYieldCurveResult,
 } from "@/types/api";
 import {
   buildPayoffDiagram,
   buildVolSurface,
   computeGreeks,
   fetchOptionChain,
+  getRiskFreeYieldCurve,
   type QuantGreeksInput,
 } from "@/server/quant/service";
 
@@ -32,6 +34,10 @@ export type QuantDisplayEvent =
   | {
       type: "display_quant_greeks";
       data: { result: QuantGreeksResult; preferred_metric?: QuantGreeksMetric };
+    }
+  | {
+      type: "display_quant_yield_curve";
+      data: { curve: QuantYieldCurveResult };
     }
   | {
       type: "display_quant_surface";
@@ -200,6 +206,40 @@ function shapeSurfaceForAgent(surface: QuantSurfaceResult) {
   };
 }
 
+function shapeYieldCurveForAgent(curve: QuantYieldCurveResult) {
+  const nodeMap = new Map(curve.nodes.map((node) => [node.label, node]));
+  const twoYear = nodeMap.get("2Y");
+  const tenYear = nodeMap.get("10Y");
+  const thirtyYear = nodeMap.get("30Y");
+  const twoTenSlope =
+    twoYear && tenYear
+      ? Number((tenYear.rate_percent - twoYear.rate_percent).toFixed(4))
+      : null;
+
+  return {
+    as_of: curve.as_of,
+    source: curve.source,
+    curve_method: curve.curve_method,
+    interpolation_method: curve.interpolation_method,
+    node_count: curve.nodes.length,
+    nodes: curve.nodes.map((node) => ({
+      label: node.label,
+      tenor_days: node.tenor_days,
+      rate_percent: node.rate_percent,
+    })),
+    key_levels: {
+      "1M": nodeMap.get("1M")?.rate_percent ?? null,
+      "3M": nodeMap.get("3M")?.rate_percent ?? null,
+      "6M": nodeMap.get("6M")?.rate_percent ?? null,
+      "2Y": twoYear?.rate_percent ?? null,
+      "10Y": tenYear?.rate_percent ?? null,
+      "30Y": thirtyYear?.rate_percent ?? null,
+    },
+    slope_2s10s_percent_points: twoTenSlope,
+    warnings: curve.warnings,
+  };
+}
+
 function shapePayoffForAgent(payoff: QuantPayoffResult) {
   return {
     symbol: payoff.symbol,
@@ -354,6 +394,18 @@ export const QUANT_TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: "function",
     function: {
+      name: "fetch_yield_curve",
+      description:
+        "Fetch the current U.S. Treasury constant-maturity par curve (CMT nodes) used by Quant Alpha to derive tenor-matched risk-free rates for options pricing. This is not a bootstrapped zero-coupon curve.",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "build_vol_surface",
       description:
         "Build an arbitrage-constrained SSVI implied-volatility surface for a U.S. equity ticker across moneyness and expiry.",
@@ -464,6 +516,15 @@ export async function dispatchQuantToolWithDisplay(
     return [
       JSON.stringify(shapeSurfaceForAgent(surface)),
       [{ type: "display_quant_surface", data: { surface } }],
+    ];
+  }
+
+  if (name === "fetch_yield_curve") {
+    const curve = await getRiskFreeYieldCurve();
+
+    return [
+      JSON.stringify(shapeYieldCurveForAgent(curve)),
+      [{ type: "display_quant_yield_curve", data: { curve } }],
     ];
   }
 

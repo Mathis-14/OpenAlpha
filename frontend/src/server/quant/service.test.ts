@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildPayoffDiagram, computeGreeks } from "./service.ts";
+import type { TreasuryCurve } from "./rates.ts";
+import { buildPayoffDiagram, computeGreeks, shapeTreasuryCurveForQuant } from "./service.ts";
 
 test("computeGreeks works without a live chain when all inputs are explicit", async () => {
   const result = await computeGreeks({
@@ -40,6 +41,42 @@ test("computeGreeks rejects conflicting expiration and day tenor inputs", async 
       }),
     /disagree materially/i,
   );
+});
+
+test("shapeTreasuryCurveForQuant exposes the Treasury curve used for risk-free interpolation", () => {
+  const curve: TreasuryCurve = {
+    as_of: "2026-04-02",
+    nodes: [
+      {
+        series_id: "DGS1MO",
+        label: "1M",
+        tenor_days: 30,
+        latest_date: "2026-04-02",
+        rate_percent: 4.2,
+        rate_decimal: 0.042,
+        continuous_rate: Math.log(1.042),
+      },
+      {
+        series_id: "DGS10",
+        label: "10Y",
+        tenor_days: 3650,
+        latest_date: "2026-04-02",
+        rate_percent: 4.05,
+        rate_decimal: 0.0405,
+        continuous_rate: Math.log(1.0405),
+      },
+    ],
+  };
+
+  const result = shapeTreasuryCurveForQuant(curve);
+
+  assert.equal(result.source, "fred");
+  assert.equal(result.curve_method, "treasury_constant_maturity_par_curve");
+  assert.equal(result.interpolation_method, "log_discount_factor");
+  assert.equal(result.as_of, "2026-04-02");
+  assert.equal(result.nodes.length, 2);
+  assert.equal(result.nodes[0]?.label, "1M");
+  assert.equal(result.nodes[1]?.label, "10Y");
 });
 
 test("buildPayoffDiagram computes a long call payoff profile", async () => {

@@ -11,6 +11,7 @@ import type {
   QuantPayoffLeg,
   QuantPayoffResult,
   QuantSurfaceResult,
+  QuantYieldCurveResult,
 } from "@/types/api";
 import { ServiceError } from "@/server/shared/errors";
 import { normalizeDashboardSymbol, toProviderSymbol } from "@/server/market/symbols";
@@ -134,6 +135,8 @@ type StrikeAnchorResult = {
   volatility: number;
   anchor: QuantGreeksAnchorContract;
 };
+
+const DEFAULT_GREEKS_TARGET_DAYS = 30;
 
 function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -552,6 +555,30 @@ function meanOrNull(values: Array<number | null | undefined>): number | null {
   return usable.reduce((sum, value) => sum + value, 0) / usable.length;
 }
 
+function getDefaultGreeksTargetDays(nodes: QuantGreeksTermNode[]): number {
+  if (nodes.length === 0) {
+    return DEFAULT_GREEKS_TARGET_DAYS;
+  }
+
+  const nodeAtOrAfterThirty = nodes.find((node) => node.days_to_expiry >= DEFAULT_GREEKS_TARGET_DAYS);
+  if (!nodeAtOrAfterThirty) {
+    return nodes[nodes.length - 1]!.days_to_expiry;
+  }
+
+  const nearestByDistance = nodes.reduce((best, node) => {
+    return Math.abs(node.days_to_expiry - DEFAULT_GREEKS_TARGET_DAYS) <
+      Math.abs(best.days_to_expiry - DEFAULT_GREEKS_TARGET_DAYS)
+      ? node
+      : best;
+  }, nodes[0]!);
+
+  if (Math.abs(nodeAtOrAfterThirty.days_to_expiry - DEFAULT_GREEKS_TARGET_DAYS) <= 7) {
+    return nodeAtOrAfterThirty.days_to_expiry;
+  }
+
+  return nearestByDistance.days_to_expiry;
+}
+
 function interpolateOptionalValue(
   lowerX: number,
   lowerY: number | null | undefined,
@@ -751,6 +778,30 @@ export async function getQuantRiskFreeRate(
   } catch {
     return FALLBACK_RISK_FREE_RATE;
   }
+}
+
+export function shapeTreasuryCurveForQuant(curve: TreasuryCurve): QuantYieldCurveResult {
+  return {
+    as_of: curve.as_of,
+    source: "fred",
+    curve_method: "treasury_constant_maturity_par_curve",
+    interpolation_method: "log_discount_factor",
+    nodes: curve.nodes.map((node) => ({
+      series_id: node.series_id,
+      label: node.label,
+      tenor_days: node.tenor_days,
+      latest_date: node.latest_date,
+      rate_percent: Number(node.rate_percent.toFixed(6)),
+      rate_decimal: Number(node.rate_decimal.toFixed(8)),
+        continuous_rate: Number(node.continuous_rate.toFixed(8)),
+      })),
+    warnings: curve.warnings,
+  };
+}
+
+export async function getRiskFreeYieldCurve(): Promise<QuantYieldCurveResult> {
+  const curve = await getTreasuryCurve();
+  return shapeTreasuryCurveForQuant(curve);
 }
 
 export async function fetchOptionChain(
@@ -993,7 +1044,7 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
     listedRequestedExpiration?.days_to_expiry ??
     explicitTargetDays ??
     (requestedExpirationDate ? daysToExpiry(requestedExpirationDate) : null) ??
-    maturityNodes[0]!.days_to_expiry;
+    getDefaultGreeksTargetDays(maturityNodes);
   const activeTenor = deriveActiveTenor(maturityNodes, targetDaysToExpiry);
   if (!activeTenor) {
     throw new ServiceError(422, {
@@ -1019,7 +1070,9 @@ async function normalizeGreeksInputs(input: QuantGreeksInput): Promise<Normalize
       `Interpolated tenor ${activeTenor.days_to_expiry}D between ${activeTenor.lower_anchor?.days_to_expiry ?? "?"}D and ${activeTenor.upper_anchor?.days_to_expiry ?? "?"}D listed expiries.`,
     );
   } else if (!input.expiration && explicitTargetDays == null) {
-    assumptions.push(`Defaulted to the nearest listed expiry (${activeTenor.expiration}).`);
+    assumptions.push(
+      `No tenor was specified, so Greeks defaulted to a representative ${activeTenor.days_to_expiry}D target tenor anchored to the live listed expiry ladder.`,
+    );
   }
 
   if (activeTenor.clamped) {
