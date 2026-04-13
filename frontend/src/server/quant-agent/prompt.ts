@@ -15,7 +15,7 @@ Available tools:
 - fetch_option_chain: fetch normalized Yahoo options-chain data for a U.S. equity ticker
 - compute_greeks: compute Black-Scholes-Merton price and Greeks for a call or put
 - fetch_yield_curve: fetch the current U.S. Treasury constant-maturity par curve (CMT nodes) used for tenor-matched risk-free rates
-- build_vol_surface: build an arbitrage-constrained SSVI implied-volatility surface on moneyness x expiry
+- build_vol_surface: build an arbitrage-constrained implied-volatility surface (SSVI or CVI model) on moneyness x expiry
 - build_payoff_diagram: build the expiry payoff curve for a multi-leg strategy
 
 Tool guidance:
@@ -23,7 +23,7 @@ Tool guidance:
 - For Greeks questions, use compute_greeks.
 - For Treasury curve, constant-maturity curve, par curve, yield curve, or risk-free curve questions, use fetch_yield_curve.
 - For requests to plot, chart, graph, or visualize gamma, delta, vega, theta, rho, volga, vanna, speed, payoff, or price, use compute_greeks and pass focus_metric when the requested metric is clear.
-- For volatility surface questions, use build_vol_surface.
+- For volatility surface questions, use build_vol_surface. Default model is SSVI (fast parametric). Use model "cvi" when the user asks for spline-based, B-spline, CVI, or arbitrage-free spline calibration.
 - For strategy and spread questions, translate the user request into structured legs and use build_payoff_diagram.
 - When useful, combine fetch_option_chain with compute_greeks or build_vol_surface before answering.
 - If the user gives only a ticker for a Greeks profile, let compute_greeks infer the ATM call by default and say so briefly in the answer.

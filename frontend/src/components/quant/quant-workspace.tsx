@@ -51,6 +51,7 @@ type QuantDisplayItem =
 
 const QUICK_PICKS = [
   "Show me the SPY volatility surface.",
+  "Show me the SPY volatility surface using CVI.",
   "Fetch the AAPL option chain and summarize the nearest expiry.",
   "Show me the current Treasury constant-maturity curve.",
   "Build the payoff diagram for a TSLA call spread.",
@@ -584,7 +585,17 @@ export default function QuantWorkspace() {
                 case "display_quant_yield_curve":
                   return <QuantYieldCurveBlock key={item.id} curve={item.curve} />;
                 case "display_quant_surface":
-                  return <QuantSurfaceBlock key={item.id} surface={item.surface} />;
+                  return (
+                    <QuantSurfaceBlock
+                      key={item.id}
+                      surface={item.surface}
+                      onSwitchModel={(model) => {
+                        handlePrefill(
+                          `Show me the ${item.surface.symbol} volatility surface using ${model.toUpperCase()}.`,
+                        );
+                      }}
+                    />
+                  );
                 case "display_quant_payoff":
                   return <QuantPayoffBlock key={item.id} payoff={item.payoff} />;
               }
@@ -1349,9 +1360,13 @@ function QuantYieldCurveBlock({
 
 function QuantSurfaceBlock({
   surface,
+  onSwitchModel,
 }: {
   surface: QuantSurfaceResult;
+  onSwitchModel?: (model: "ssvi" | "cvi") => void;
 }) {
+  const currentModel = surface.model ?? "ssvi";
+
   return (
     <section className="rounded-[18px] border border-[#E8701A]/12 bg-white p-5 shadow-[0_18px_34px_-30px_rgba(232,112,26,0.35)]">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -1364,10 +1379,30 @@ function QuantSurfaceBlock({
             {surface.symbol} IV surface
           </h3>
           <p className="text-sm text-black/58">
-            {surface.model === "ssvi" ? "SSVI-calibrated" : "Model-free"} moneyness × expiry surface built from {surface.filtered_point_count ?? surface.points.length} usable implied-volatility points.
+            {currentModel === "ssvi" ? "SSVI-calibrated" : currentModel === "cvi" ? "CVI-calibrated" : "Model-free"} moneyness × expiry surface built from {surface.filtered_point_count ?? surface.points.length} usable implied-volatility points.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {onSwitchModel && (
+            <div className="flex overflow-hidden rounded-lg border border-[#E8701A]/16">
+              {(["ssvi", "cvi"] as const).map((model) => (
+                <button
+                  key={model}
+                  type="button"
+                  onClick={() => {
+                    if (model !== currentModel) onSwitchModel(model);
+                  }}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    model === currentModel
+                      ? "bg-[#E8701A] text-white"
+                      : "bg-white text-[#c85f14] hover:bg-[#fff3e8]"
+                  }`}
+                >
+                  {model.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          )}
           <InfoStat label="Spot" value={formatNumber(surface.spot_price)} />
           <InfoStat label="Expiries" value={String(surface.expirations.length)} />
           <InfoStat label="Grid points" value={String(surface.points.length)} />
@@ -1399,13 +1434,32 @@ function QuantSurfaceBlock({
       {surface.calibration && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <InfoStat label="Model" value={(surface.model ?? "raw").toUpperCase()} />
-          <InfoStat label="rho" value={formatNumber(surface.calibration.rho, 4)} />
-          <InfoStat label="eta" value={formatNumber(surface.calibration.eta, 4)} />
-          <InfoStat label="gamma" value={formatNumber(surface.calibration.gamma, 4)} />
-          <InfoStat
-            label="Butterfly margin"
-            value={formatNumber(surface.calibration.butterfly_margin, 4)}
-          />
+          {surface.model === "cvi" ? (
+            <>
+              <InfoStat
+                label="Converged"
+                value={surface.calibration.converged ? "yes" : "no"}
+              />
+              <InfoStat
+                label="Iterations"
+                value={String(surface.calibration.iterations ?? "N/A")}
+              />
+              <InfoStat
+                label="Solver"
+                value={surface.calibration.solver_status ?? "N/A"}
+              />
+            </>
+          ) : (
+            <>
+              <InfoStat label="rho" value={formatNumber(surface.calibration.rho, 4)} />
+              <InfoStat label="eta" value={formatNumber(surface.calibration.eta, 4)} />
+              <InfoStat label="gamma" value={formatNumber(surface.calibration.gamma, 4)} />
+              <InfoStat
+                label="Butterfly margin"
+                value={formatNumber(surface.calibration.butterfly_margin, 4)}
+              />
+            </>
+          )}
           <InfoStat
             label="Calendar"
             value={surface.calibration.calendar_valid ? "valid" : "invalid"}
