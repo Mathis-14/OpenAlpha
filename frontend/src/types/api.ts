@@ -431,16 +431,21 @@ export interface QuantSurfaceResult {
   moneyness_values: number[];
   z_values: Array<Array<number | null>>;
   points: QuantSurfacePoint[];
-  model?: "ssvi";
+  model?: "ssvi" | "cvi";
   raw_point_count?: number;
   filtered_point_count?: number;
   calibration?: {
-    rho: number;
-    eta: number;
-    gamma: number;
-    butterfly_margin: number;
-    calendar_valid: boolean;
-    loss: number;
+    rho?: number;
+    eta?: number;
+    gamma?: number;
+    butterfly_margin?: number;
+    calendar_valid?: boolean;
+    loss?: number;
+    iterations?: number;
+    converged?: boolean;
+    solver_status?: string;
+    objective_value?: number;
+    butterfly_violations?: Record<string, number>;
   };
   warnings?: string[];
   data_status?: "complete" | "partial";
