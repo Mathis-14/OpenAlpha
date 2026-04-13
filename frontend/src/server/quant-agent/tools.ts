@@ -408,13 +408,18 @@ export const QUANT_TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: "build_vol_surface",
       description:
-        "Build an arbitrage-constrained SSVI implied-volatility surface for a U.S. equity ticker across moneyness and expiry.",
+        "Build an arbitrage-constrained implied-volatility surface for a U.S. equity ticker across moneyness and expiry. Supports SSVI (default) or CVI (spline-based) calibration models.",
       parameters: {
         type: "object",
         properties: {
           symbol: {
             type: "string",
             description: "U.S. equity ticker symbol.",
+          },
+          model: {
+            type: "string",
+            enum: ["ssvi", "cvi"],
+            description: "Calibration model. 'ssvi' for Surface SVI (default, fast parametric), 'cvi' for Convex Volatility Interpolation (spline-based, arbitrage-free).",
           },
         },
         required: ["symbol"],
@@ -511,7 +516,8 @@ export async function dispatchQuantToolWithDisplay(
 
   if (name === "build_vol_surface") {
     const symbol = normalizeSymbol(argumentsObject.symbol);
-    const surface = await buildVolSurface(symbol);
+    const model = argumentsObject.model === "cvi" ? "cvi" as const : "ssvi" as const;
+    const surface = await buildVolSurface(symbol, model);
 
     return [
       JSON.stringify(shapeSurfaceForAgent(surface)),

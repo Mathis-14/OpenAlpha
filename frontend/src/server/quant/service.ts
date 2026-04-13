@@ -1223,9 +1223,14 @@ export async function computeGreeks(
 
 export async function buildVolSurface(
   symbol: string,
+  model: "ssvi" | "cvi" = "ssvi",
 ): Promise<QuantSurfaceResult> {
   const chain = await fetchOptionChain(symbol);
   const riskFreeRate = await getQuantRiskFreeRate(1);
+  if (model === "cvi") {
+    const { buildCVISurface } = await import("@/server/quant/cvi/index");
+    return buildCVISurface(chain, riskFreeRate);
+  }
   return buildArbitrageFreeSurface(chain, riskFreeRate);
 }
 
