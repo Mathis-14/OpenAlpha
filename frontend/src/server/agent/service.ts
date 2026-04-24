@@ -924,7 +924,8 @@ export async function* runAgent(
     args: Record<string, unknown>;
   }> = [];
   const observedToolResults: AgentToolResultRecord[] = [];
-  let toolPolicyCorrectionUsed = false;
+  let policyViolationCorrectionUsed = false;
+  let missingRequiredCorrectionUsed = false;
   let answerRevisionUsed = false;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
@@ -955,7 +956,7 @@ export async function* runAgent(
       const violations = getToolPolicyViolations(policy, calledToolNames);
 
       if (violations.length > 0) {
-        if (toolPolicyCorrectionUsed) {
+        if (policyViolationCorrectionUsed) {
           for await (const chunk of emitBufferedAnswer(
             "I can't answer this request accurately with the currently allowed tool path.",
           )) {
@@ -965,7 +966,7 @@ export async function* runAgent(
           return;
         }
 
-        toolPolicyCorrectionUsed = true;
+        policyViolationCorrectionUsed = true;
         const rejectedDraft = normalizeTextContent(choice.message.content).trim();
         if (rejectedDraft) {
           messages.push({
@@ -1059,7 +1060,7 @@ export async function* runAgent(
       observedToolCalls.map((toolCall) => toolCall.name as AgentToolName),
     );
     if (missingRequiredTools.length > 0) {
-      if (toolPolicyCorrectionUsed) {
+      if (missingRequiredCorrectionUsed) {
         for await (const chunk of emitBufferedAnswer(
           "I couldn't complete the required data fetch path for this question, so I can't answer it reliably from the current tool output.",
         )) {
@@ -1069,7 +1070,7 @@ export async function* runAgent(
         return;
       }
 
-      toolPolicyCorrectionUsed = true;
+      missingRequiredCorrectionUsed = true;
       messages.push({
         role: "assistant",
         content: draft,
